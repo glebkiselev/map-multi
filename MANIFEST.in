@@ -1,0 +1,3 @@
+include src/benchmarks/mapddl/blocks/*.pddl
+include src/benchmarks/mapddl/blocks/*.ini
+
