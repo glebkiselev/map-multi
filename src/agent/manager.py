@@ -7,14 +7,18 @@ from multiprocessing import Process, Queue, Pool, Pipe
 from multiprocessing.util import log_to_stderr
 
 
-def agent_activation(agpath, agtype, name, agents, problem, backward):
+def agent_activation(agpath, agtype, name, agents, problem, backward, childpipe):
     #logger.info('Im inside')
-    print('im inside')
     class_ = getattr(importlib.import_module(agpath), agtype)
     workman = class_()
     workman.multinitialize(name, agents, problem, backward)
     new_signs = workman.loadSWM()
-    return str(new_signs)
+    childpipe.send((name, new_signs))
+    print(childpipe.recv())
+    solution = workman.search_solution()
+    print(solution)
+
+    #return name, new_signs
 
 class Manager:
     def __init__(self, agents, problem, agpath = 'mapmulti.agent.agent_search', agtype = 'MlAgent', backward = True):
@@ -28,59 +32,22 @@ class Manager:
         self.agents = agents
         self.logger = log_to_stderr()
         self.logger.setLevel(logging.INFO)
-
-    def agent_start(self, agent):
-        """
-        Function that send task to agent
-        :param agent: agent name
-        :return: flag that task accomplished
-        """
-        print('im inside')
-        logging.basicConfig(level=logging.INFO)
-        logger = logging.getLogger("process-%r" % (agent.name))
-        logger.info('Agent {0} start planning'.format(agent.name))
-        saved = agent.search_solution()
-        if saved:
-            logger.info('Agent {0} finish planning'.format(agent.name))
-            self.finished = True
-        return agent.name +' finished'
-
-    # def server_start(self, port, amount_agents, q):
-    #     import socket
-    #     serversocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    #     serversocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    #     serversocket.bind(('', port))
-    #     serversocket.listen(10)
     #
-    #     agents_socket = []
-    #
-    #     while True:
-    #         # waiting plans from agents
-    #         (clientsocket, address) = serversocket.accept()
-    #         agents_socket.append(clientsocket)
-    #         solution = clientsocket.recv(1024)
-    #         solution = solution.decode()
-    #
-    #         if solution:
-    #             self.solution.append(solution)
-    #         else:
-    #             logging.info("Solution is not found by agents")
-    #         print('connected:', address)
-    #
-    #         if len(self.solution) == amount_agents:
-    #             keeper = action_keeper(self.solution)
-    #             agent, self.solution = keeper.auction()
-    #             # send best solution forward to agents
-    #             for sock in agents_socket:
-    #                 sock.send(self.solution.encode('utf-8'))
-    #         else:
-    #             continue
-    #         break
-    #     clientsocket.close()
-    #
-    #     q.put(self.solution)
-    #     return self.solution
-
+    # def agent_start(self, agent):
+    #     """
+    #     Function that send task to agent
+    #     :param agent: agent name
+    #     :return: flag that task accomplished
+    #     """
+    #     print('im inside')
+    #     logging.basicConfig(level=logging.INFO)
+    #     logger = logging.getLogger("process-%r" % (agent.name))
+    #     logger.info('Agent {0} start planning'.format(agent.name))
+    #     saved = agent.search_solution()
+    #     if saved:
+    #         logger.info('Agent {0} finish planning'.format(agent.name))
+    #         self.finished = True
+    #     return agent.name +' finished'
 
     def manage_agents(self):
         """
@@ -120,12 +87,48 @@ class Manager:
         #
         # return q.get()
 
+        # queue = Queue()
+        # with Pool(processes=len(self.agents)) as pool:
+        #     multiple_results = [pool.apply_async(agent_activation, (self.agpath, self.agtype,ag, self.agents, self.problem, self.backward, queue))
+        #                         for ag in self.agents]
+        #     gr_exp = [queue.get()]
+        #
+        #     group_experience = dict([el.get(True) for el in multiple_results])
+        #     # Select the major (most experienced) agent
+        #     most_exp = max(group_experience.values())
+        #     major = [ag for ag, exp in group_experience if exp == most_exp][0]
 
 
-        with Pool(processes=len(self.agents)) as pool:
-            multiple_results = [pool.apply_async(agent_activation, (self.agpath, self.agtype,ag, self.agents, self.problem, self.backward))
-                                for ag in self.agents]
-            print([el.get(True) for el in multiple_results])
+        allProcesses = []
+
+        for ag in self.agents:
+            parent_conn, child_conn = Pipe()
+            p = Process(target=agent_activation, args=(self.agpath, self.agtype,ag, self.agents, self.problem, self.backward, child_conn,))
+            allProcesses.append((p, parent_conn))
+            p.start()
+
+        group_experience = []
+        for pr, conn in allProcesses:
+            group_experience.append((conn.recv(), conn))
+        # Select the major (most experienced) agent
+        most_exp = 0
+        for info, _ in group_experience:
+            if info[1] > most_exp:
+                most_exp = info[1]
+
+        major = [info[0] for info, conn in group_experience if info[1] == most_exp][0]
+
+        # Create a queue for all agents to put their solutions.
+        # Major agent will create an auction and send back the best solution.
+        queue = Queue()
+        for pr, conn in allProcesses:
+            conn.send(major)
+
+        for pr, conn in allProcesses:
+            pr.join()
+
+
+
 
 
         # leader search.
@@ -142,57 +145,6 @@ class Manager:
         # result = pool.apply_async(self.agent_start, (25,))
         # print(result.get(timeout=1))
 
-        # def creator(data, q):
-        #     """
-        #     Creates data to be consumed and waits for the consumer
-        #     to finish processing
-        #     """
-        #     print('Creating data and putting it on the queue')
-        #     for item in data:
-        #         q.put(item)
-        #
-        # def my_consumer(q):
-        #     """
-        #     Consumes some data and works on it
-        #     In this case, all it does is double the input
-        #     """
-        #     while True:
-        #         data = q.get()
-        #         print('data found to be processed: {}'.format(data))
-        #
-        #         processed = data * 2
-        #         print(processed)
-
-
-#
-# class action_keeper():
-#     def __init__(self, solutions):
-#         self.solutions = solutions
-#
-#
-#     def auction(self):
-#         plans = {}
-#         auct = {}
-#         maxim = 1
-#         for sol in self.solutions:
-#             agent, plan = reconstructor(sol)
-#             plans[agent] = plan
-#         for agent, plan in plans.items():
-#             if not plan in auct:
-#                 auct[plan] = 1
-#             else:
-#                 iter = auct[plan]
-#                 auct[plan] = iter+1
-#                 if iter+1 > maxim:
-#                     maxim = iter+1
-#
-#         plan = [plan for plan, count in auct.items() if count==maxim][0]
-#
-#         agents = []
-#         for agent, pl in plans.items():
-#             if pl == plan:
-#                 agents.append(agent)
-#         return agents[0], plan
 
 
 
