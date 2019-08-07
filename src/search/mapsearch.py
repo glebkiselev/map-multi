@@ -71,7 +71,9 @@ class MapSearch():
         for agent, cm in meanings:
             result, checked = self._check_activity(cm, active_pm.sign.meanings[1], self.backward)
             if result:
-                applicable_meanings.add((agent, checked))
+                maxlen = max([len(ev.coincidences) for ev in checked.cause])
+                if maxlen != 1:
+                    applicable_meanings.add((agent, checked))
         return applicable_meanings
 
     def _experience_parts(self, precedents):
@@ -251,6 +253,10 @@ class MapSearch():
             I_obj = I_objects[0]
         else:
             I_obj = None
+        They_sign = self.world_model["They"]
+        agents = They_sign.spread_up_activity_obj("significance", 1)
+        for cm in agents:
+            agent_back.add(cm.sign)
         return I_sign, I_obj, agent_back
 
     def _generate_meanings(self, chains):

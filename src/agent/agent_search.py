@@ -5,7 +5,7 @@ from mapmulti.search.mapsearch import MapSearch
 from mapcore.agent.agent_search import Agent
 from mapmulti.agent.messagen import reconstructor
 from mapcore.grounding.sign_task import Task
-from mapcore.grounding import pddl_grounding
+from mapmulti.grounding import pddl_grounding
 from mapmulti.agent.messagen import Tmessage
 
 class MlAgent(Agent):
@@ -49,7 +49,7 @@ class MlAgent(Agent):
         This function is needed to synthesize all plans, choose the best one and
         save the experience.
         """
-        logging.info('Search start: {0}, Start time: {1}'.format(self.task.name, time.clock()))
+        logging.info('Search start: {0}, Start time: {1} by agent: {2}'.format(self.task.name, time.clock(), self.name))
         connection_sign = self.task.signs["Send"]
         cms = connection_sign.spread_up_activity_motor('significance', 1)
         method = None
