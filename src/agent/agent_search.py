@@ -89,7 +89,7 @@ class MlAgent(Agent):
         mes = Tmessage(self.solution, self.name)
         message = getattr(mes, method)()
 
-        return self.solution
+        return message
         # file_name = self.task.save_signs(self.solution)
         # if file_name:
         #     logging.info('Agent ' + self.name + ' finished all works')
@@ -99,13 +99,16 @@ class DecisionStrategies:
         self.plans = solutions
 
     def auction(self):
-        plans = {}
+        solutions = {}
         auct = {}
         maxim = 1
-        for sol in self.plans:
-            agent, plan = reconstructor(sol)
-            plans[agent] = plan
-        for agent, plan in plans.items():
+        for agent, sol in self.plans.items():
+            _, plan = reconstructor(sol)
+            clear_plan = ''
+            for el in plan.strip().split(';')[:-2]:
+                clear_plan+=el + ';'
+            solutions[agent] = clear_plan
+        for agent, plan in solutions.items():
             if not plan in auct:
                 auct[plan] = 1
             else:
@@ -117,8 +120,8 @@ class DecisionStrategies:
         plan = [plan for plan, count in auct.items() if count==maxim][0]
 
         agents = []
-        for agent, pl in plans.items():
+        for agent, pl in solutions.items():
             if pl == plan:
                 agents.append(agent)
-        return agents[0], plan
+        return agents, plan
 

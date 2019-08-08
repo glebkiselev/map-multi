@@ -1,24 +1,28 @@
-import multiprocessing
-import os
-import time
 import importlib
 import logging
-from multiprocessing import Process, Queue, Pool, Pipe
+from multiprocessing import Process,Pipe
 from multiprocessing.util import log_to_stderr
+from mapmulti.agent.agent_search import DecisionStrategies
 
 
 def agent_activation(agpath, agtype, name, agents, problem, backward, childpipe):
-    #logger.info('Im inside')
+
     class_ = getattr(importlib.import_module(agpath), agtype)
     workman = class_()
     workman.multinitialize(name, agents, problem, backward)
     new_signs = workman.loadSWM()
     childpipe.send((name, new_signs))
-    print(childpipe.recv())
+    major_agent = childpipe.recv()
     solution = workman.search_solution()
-    print(solution)
-
-    #return name, new_signs
+    childpipe.send(solution)
+    if name == major_agent:
+        solutions = childpipe.recv()
+        logging.info("Solutions received by major agent %s" % name)
+        keeper = DecisionStrategies(solutions)
+        # can be changed to any other strategy
+        agents, solution = keeper.auction()
+        # ask agents whose plan won to save their solutions, to other agents - save won agent solution (find in their plans the won plan).
+        print(agents)
 
 class Manager:
     def __init__(self, agents, problem, agpath = 'mapmulti.agent.agent_search', agtype = 'MlAgent', backward = True):
@@ -32,78 +36,16 @@ class Manager:
         self.agents = agents
         self.logger = log_to_stderr()
         self.logger.setLevel(logging.INFO)
-    #
-    # def agent_start(self, agent):
-    #     """
-    #     Function that send task to agent
-    #     :param agent: agent name
-    #     :return: flag that task accomplished
-    #     """
-    #     print('im inside')
-    #     logging.basicConfig(level=logging.INFO)
-    #     logger = logging.getLogger("process-%r" % (agent.name))
-    #     logger.info('Agent {0} start planning'.format(agent.name))
-    #     saved = agent.search_solution()
-    #     if saved:
-    #         logger.info('Agent {0} finish planning'.format(agent.name))
-    #         self.finished = True
-    #     return agent.name +' finished'
 
     def manage_agents(self):
-        """
-        Create a pool of workers (1 per agent) and wait for their plans.
-        The first action is using multisets to find the major agent. There are several strategies - we use
-        the strategy, when the major agent is agent with the biggest amount of knowledge about current task.
-        It can be partial or full.
-        """
-        # agents_of_the_task = []
-        #
-        # for agent in self.agents:
-        #     class_ = getattr(importlib.import_module(self.agpath), self.agtype)
-        #     workman = class_()
-        #     workman.multinitialize(agent, self.agents, self.problem, self.backward)
-        #     q = Queue()
-        #     agents_of_the_task.append([workman, q])
-        # for current_agent in agents_of_the_task:
-        #     others = [[agent[0].name, agent[1]] for agent in agents_of_the_task if not agent is current_agent]
-        #     current_agent.insert(2, others)
-        #
-        # multiprocessing.set_start_method('spawn')
-        # q = Queue()
-        # p = Process(target=self.server_start, args=(port-len(clagents), len(clagents), q, ))
-        # p.start()
-        # pool = Pool(processes=len(clagents)) # make a pool with agents
-        # multiple_results = [pool.apply_async(self.agent_start, (agent, port, others)) for agent, port, others in
-        #                     clagents]
-        # # multiple_results = [pool.apply_async(self.agent_start, (agent)) for agent, port, others in
-        # #                     clagents]
-        # if self.solution:
-        #     return self.solution
-        # else:
-        #     time.sleep(1)
-        #
-        # pool.close()
-        # pool.join()
-        #
-        # return q.get()
-
-        # queue = Queue()
-        # with Pool(processes=len(self.agents)) as pool:
-        #     multiple_results = [pool.apply_async(agent_activation, (self.agpath, self.agtype,ag, self.agents, self.problem, self.backward, queue))
-        #                         for ag in self.agents]
-        #     gr_exp = [queue.get()]
-        #
-        #     group_experience = dict([el.get(True) for el in multiple_results])
-        #     # Select the major (most experienced) agent
-        #     most_exp = max(group_experience.values())
-        #     major = [ag for ag, exp in group_experience if exp == most_exp][0]
-
 
         allProcesses = []
 
         for ag in self.agents:
             parent_conn, child_conn = Pipe()
-            p = Process(target=agent_activation, args=(self.agpath, self.agtype,ag, self.agents, self.problem, self.backward, child_conn,))
+
+            p = Process(target=agent_activation,
+                        args=(self.agpath, self.agtype,ag, self.agents, self.problem, self.backward, child_conn, ))
             allProcesses.append((p, parent_conn))
             p.start()
 
@@ -118,12 +60,20 @@ class Manager:
 
         major = [info[0] for info, conn in group_experience if info[1] == most_exp][0]
 
-        # Create a queue for all agents to put their solutions.
         # Major agent will create an auction and send back the best solution.
-        queue = Queue()
         for pr, conn in allProcesses:
             conn.send(major)
 
+        solutions = {}
+        # Receive solutions
+        for info, conn in group_experience:
+            solutions[info[0]] = conn.recv()
+
+        # Send solutions to the major agent
+        for info, conn in group_experience:
+            if info[0] == major:
+                conn.send(solutions)
+                break
         for pr, conn in allProcesses:
             pr.join()
 
