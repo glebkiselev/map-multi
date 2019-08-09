@@ -60,6 +60,12 @@ class Task:
 
             agents = [self.signs["I"]]
             agents.extend(I_obj)
+            for id in range(1, len(self.signs['agent'].significances) + 1):
+                other_ag = self.signs['agent'].significances[id].get_signs()
+                if I_obj[0] not in other_ag:
+                    for ag in other_ag:
+                        agents.append(ag)
+
             self.start_situation.name += self.name
             self.goal_situation.name += self.name
 
@@ -204,6 +210,7 @@ class Task:
                         file_name.append(f)
         else:
             file_name = [file_name]
+        signs = None
         if file_name:
             if load_all:
                 pass

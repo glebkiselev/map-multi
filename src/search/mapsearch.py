@@ -200,7 +200,7 @@ class MapSearch():
         """
         if not cur_plan:
             logging.info('Clarify experience plan')
-        applicable = []
+        #applicable = []
         if self.backward:
             act = acts[-(iteration+1)].sign
         else:
@@ -208,10 +208,12 @@ class MapSearch():
         finall_plans = []
         plan = copy(cur_plan)
 
-        for agent, cm in [action for action in self.exp_acts[act] if (action[0] is not None and len(action[1].cause))]:
-            result, checked = self._check_activity(cm, active_pm.sign.meanings[1], self.backward)
-            if result:
-                applicable.append((agent, checked))
+        # for agent, cm in [action for action in self.exp_acts[act] if (action[0] is not None and len(action[1].cause))]:
+        #     result, checked = self._check_activity(cm, active_pm.sign.meanings[1], self.backward)
+        #     if result:
+        #         applicable.append((agent, checked))
+        applicable = self.applicable_search([action for action in self.exp_acts[act] if
+                                             (action[0] is not None and len(action[1].cause))], active_pm.sign.meanings[1])
 
         if not applicable:
             logging.info('No applicable actions was found')

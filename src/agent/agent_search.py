@@ -4,7 +4,7 @@ import time
 from mapmulti.search.mapsearch import MapSearch
 from mapcore.agent.agent_search import Agent
 from mapmulti.agent.messagen import reconstructor
-from mapcore.grounding.sign_task import Task
+from mapmulti.grounding.sign_task import Task
 from mapmulti.grounding import pddl_grounding
 from mapmulti.agent.messagen import Tmessage
 
@@ -24,7 +24,7 @@ class MlAgent(Agent):
         self.name = name
         self.problem = problem
         self.solution = []
-        self.final_solution = ''
+        self.allsolutions = []
         self.backward = backward
         self.others = {ag for ag in agents if ag != name}
         self.task = None
@@ -44,6 +44,19 @@ class MlAgent(Agent):
         else:
             return 0
 
+    def sol_to_acronim(self, solution):
+        acronim = ''
+        for act in solution:
+            if act[3]:
+                if act[3].name == 'I':
+                    name = self.name
+                else:
+                    name = act[3].name
+            else:
+                name = self.name
+            acronim += act[1] + ' ' + name + ';'
+        return acronim
+
     def search_solution(self):
         """
         This function is needed to synthesize all plans, choose the best one and
@@ -56,43 +69,49 @@ class MlAgent(Agent):
         cm = None
         for sign, action in cms:
             for connector in sign.out_significances:
-                if connector.in_sign.name == "They" and len(self.others) > 1:
+                if len(self.others) > 1:
                     method = action
                     pm = connector.out_sign.significances[1]
                     cm = pm.copy('significance', 'meaning')
-                elif connector.in_sign.name != "They" and len(self.others) == 1:
+                elif len(self.others) == 1:
                     method = action
                     cm = connector.out_sign.significances[1].copy('significance', 'meaning')
                 elif len(self.others) == 0:
                     method = 'save_achievement'
         search = MapSearch(self.task, self.backward)
-        solutions = search.search_plan()
-        self.solution = search.long_relations(solutions)
+        self.allsolutions = search.search_plan()
+        self.solution = search.long_relations(self.allsolutions)
         if self.backward:
             self.solution = list(reversed(self.solution))
         sol_acronims = []
-        for sol in solutions:
-            acronim = ''
-            for act in sol:
-                if act[3]:
-                    if act[3].name == 'I':
-                        name = self.name
-                    else:
-                        name = act[3].name
-                else:
-                    name = self.name
-                acronim += act[1] + ' ' + name + ';'
+        for sol in self.allsolutions:
+            acronim = self.sol_to_acronim(sol)
             sol_acronims.append(acronim)
-        self.solution = search.long_relations(solutions)
+        self.solution = search.long_relations(self.allsolutions)
         self.solution.append((connection_sign.add_meaning(), method, cm, self.task.signs["I"]))
 
         mes = Tmessage(self.solution, self.name)
         message = getattr(mes, method)()
 
         return message
-        # file_name = self.task.save_signs(self.solution)
-        # if file_name:
-        #     logging.info('Agent ' + self.name + ' finished all works')
+
+    def save_solution(self, solution):
+        solacr = ''
+        for sol in solution.split(';')[:-1]:
+            solacr+=sol.strip() + ';'
+        for sol in self.allsolutions:
+            if self.backward:
+                sol = list(reversed(self.solution))
+            acronim = self.sol_to_acronim(sol)
+            if acronim == solacr:
+                file_name = self.task.save_signs(sol)
+                if file_name:
+                    logging.info('Agent ' + self.name + ' finished all works')
+                break
+        else:
+            logging.info("Agent {0} can not find the right solution to save!")
+
+
 
 class DecisionStrategies:
     def __init__(self, solutions):

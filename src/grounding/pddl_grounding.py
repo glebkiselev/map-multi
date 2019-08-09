@@ -5,7 +5,7 @@ import itertools
 from functools import reduce
 
 from mapcore.grounding.semnet import Sign
-from mapcore.grounding.sign_task import Task
+from mapmulti.grounding.sign_task import Task
 from mapcore.grounding.pddl_grounding import signify_predicates, pred_resonate, _update_predicates
 from mapcore.search.mapsearch import MapSearch
 
@@ -171,26 +171,26 @@ def signify_connection(signs):
     signs[Approve.name] = Approve
 
     They_sign = signs["They"]
-    agents = They_sign.spread_up_activity_obj("significance", 1)
-    agents_type = []
-    for agent in agents:
-        agents_type.append({cm.sign for cm in agent.sign.spread_up_activity_obj("significance", 1)})
-    types = []
-    if agents_type:
-        types = [t for t in reduce(lambda x,y: x&y, agents_type) if t != signs["object"]]
-    if types and len(agents):
-        type = types[0]
-    else:
-        type = signs["I"]
+    # agents = They_sign.spread_up_activity_obj("significance", 1)
+    # agents_type = []
+    # for agent in agents:
+    #     agents_type.append({cm.sign for cm in agent.sign.spread_up_activity_obj("significance", 1)})
+    # types = []
+    # if agents_type:
+    #     types = [t for t in reduce(lambda x,y: x&y, agents_type) if t != signs["object"]]
+    # if types and len(agents):
+    #     type = types[0]
+    # else:
+    #     type = signs["I"]
 
     They_signif = They_sign.add_significance()
     brdct_signif = Broadcast.add_significance()
     connector = They_signif.add_feature(brdct_signif)
     Broadcast.add_out_significance(connector)
-    type_signif = type.add_significance()
+
     approve_signif = Approve.add_significance()
-    # They_signif = They_sign.add_significance()
-    connector = type_signif.add_feature(approve_signif)
+    They_signif = They_sign.add_significance()
+    connector = They_signif.add_feature(approve_signif)
     Approve.add_out_significance(connector)
 
     brdct_signif = Broadcast.add_significance()
