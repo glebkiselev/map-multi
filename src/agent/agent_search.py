@@ -46,6 +46,8 @@ class MlAgent(Agent):
 
     def sol_to_acronim(self, solution):
         acronim = ''
+        if solution[-1][1] == 'approve' or solution[-1][1] == 'broadcast':
+            solution = solution[:-1]
         for act in solution:
             if act[3]:
                 if act[3].name == 'I':
@@ -100,10 +102,10 @@ class MlAgent(Agent):
         for sol in solution.split(';')[:-1]:
             solacr+=sol.strip() + ';'
         for sol in self.allsolutions:
-            if self.backward:
-                sol = list(reversed(self.solution))
             acronim = self.sol_to_acronim(sol)
             if acronim == solacr:
+                if self.backward:
+                    sol = list(reversed(sol))
                 file_name = self.task.save_signs(sol)
                 if file_name:
                     logging.info('Agent ' + self.name + ' finished all works')

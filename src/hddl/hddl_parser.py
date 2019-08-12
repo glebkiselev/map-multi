@@ -69,19 +69,4 @@ class HTNParser:
         self.utokens = [':objects', ':htn', ':init']
         return self.ParseBlock(descr)
 
-# if __name__ == '__main__':
-#
-#     domain_file = '../benchmarks/hierarchical/domain.hddl'
-#     problem_file = '../benchmarks/hierarchical/task1.hddl'
-#
-#     parser = Parser(domain_file, problem_file)
-#     domain = parser.ParseDomain(parser.domain)
-#     problem = parser.ParseProblem(parser.problem)
-#
-#
-#     ground(domain, problem)
-#
-#     htn = HTNSearch(signs)
-#     plan = htn.search_plan()
-#     print()
 
