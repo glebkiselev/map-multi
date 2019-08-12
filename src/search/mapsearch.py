@@ -12,7 +12,7 @@ MAX_CL_LV = 1
 class MapSearch():
     def __init__ (self, task, backward):
         self.world_model = task.signs
-        self.MAX_ITERATION = 30
+        self.MAX_ITERATION = 7
         self.exp_acts = []
         self.exp_sits = []
         self.backward = backward
@@ -200,7 +200,7 @@ class MapSearch():
         """
         if not cur_plan:
             logging.info('Clarify experience plan')
-        #applicable = []
+
         if self.backward:
             act = acts[-(iteration+1)].sign
         else:
@@ -208,10 +208,6 @@ class MapSearch():
         finall_plans = []
         plan = copy(cur_plan)
 
-        # for agent, cm in [action for action in self.exp_acts[act] if (action[0] is not None and len(action[1].cause))]:
-        #     result, checked = self._check_activity(cm, active_pm.sign.meanings[1], self.backward)
-        #     if result:
-        #         applicable.append((agent, checked))
         applicable = self.applicable_search([action for action in self.exp_acts[act] if
                                              (action[0] is not None and len(action[1].cause))], active_pm.sign.meanings[1])
 
@@ -228,11 +224,6 @@ class MapSearch():
                 logging.info('Experience action %s added to plan' % action[1].sign.name)
             else:
                 continue
-            # if acts:
-                # if not self.backward:
-                #     acts.pop(0)
-                # else:
-                #     acts.pop(-1)
             if next_pm.includes('image', check_pm):
                     if plan:
                         finall_plans.extend(plan)
