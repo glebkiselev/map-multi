@@ -11,6 +11,8 @@ src/agent/__init__.py
 src/agent/agent_search.py
 src/agent/manager.py
 src/agent/messagen.py
+src/benchmarks/mahddl/blocks/domain.hddl
+src/benchmarks/mahddl/blocks/task1.hddl
 src/benchmarks/mapddl/blocks/domain.pddl
 src/benchmarks/mapddl/blocks/task1.pddl
 src/benchmarks/mapddl/blocks/task2.pddl
@@ -22,6 +24,7 @@ src/grounding/hddl_grounding.py
 src/grounding/pddl_grounding.py
 src/grounding/semnet.py
 src/grounding/sign_task.py
+src/hddl/__init__.py
 src/hddl/branch_parser.py
 src/hddl/hddl_parser.py
 src/pddl/__init__.py

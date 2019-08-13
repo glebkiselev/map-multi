@@ -8,13 +8,17 @@ def create_config(task_num = '1', refinement_lv = '1', benchmark = None, delim =
     Create a config file for map-multi algorithm
     """
     if not benchmark:
-        folder = 'mapddl'+delim+ 'blocks'+delim
-        ext = '.pddl'
-        if task_type == 'htn':
+        if task_type == 'mapddl':
+            folder = 'mapddl'+delim+ 'blocks'+delim
+            ext = '.pddl'
+        elif task_type == 'mahddl':
+            folder = 'mahddl'+delim+ 'blocks'+delim
+            ext = '.hddl'
+        elif task_type == 'htn':
             folder = 'hierarchical' +delim
             ext = '.hddl'
-        elif task_type != 'classic' and task_type != 'multi':
-            print('Wrong task_type!!! (classic, htn or multi)!!')
+        else:
+            print('Wrong task_type!!! (classic, htn, mahddl or mapddl)!!')
             sys.exit(1)
         path_bench = 'benchmarks' +delim + folder
         if not isinstance(task_num, str):

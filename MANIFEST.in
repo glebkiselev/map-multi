@@ -1,3 +1,5 @@
 include src/benchmarks/mapddl/blocks/*.pddl
 include src/benchmarks/mapddl/blocks/*.ini
+include src/benchmarks/mahddl/blocks/*.hddl
+include src/benchmarks/mahddl/blocks/*.ini
 
