@@ -1,11 +1,8 @@
 import logging
 import time
 
-from mapmulti.search.mapsearch import MapSearch
 from mapcore.agent.agent_search import Agent
 from mapmulti.agent.messagen import reconstructor
-from mapmulti.grounding.sign_task import Task
-from mapmulti.grounding import pddl_grounding
 from mapmulti.agent.messagen import Tmessage
 
 class MlAgent(Agent):
@@ -13,7 +10,7 @@ class MlAgent(Agent):
         super().__init__()
         pass
 
-    # Initialization
+    # Initialization pddl agent
     def multinitialize(self, name, agents, problem, backward):
         """
         This function allows agent to be initialized. We do not use basic __init__ to let
@@ -34,6 +31,8 @@ class MlAgent(Agent):
         This method loads SWM and count the amount of usable experience
         :return: the amount of experience (in signs)
         """
+        from mapmulti.grounding.sign_task import Task
+        from mapmulti.grounding import pddl_grounding
         logging.info('Grounding start: {0}'.format(self.problem.name))
         signs = Task.load_signs(self.name)
         self.task = pddl_grounding.ground(self.problem, self.name, signs)
@@ -43,6 +42,19 @@ class MlAgent(Agent):
             return len(self.task.signs) - len(signs)
         else:
             return 0
+
+    def loadHierarchy(self):
+        """
+        This method ground hddl task
+        :return: 0 - if there are no experience or
+        the amount of new grounded signs
+        """
+        from mapmulti.grounding.hddl_grounding import ground
+        logging.info('HDDL grounding start: {0}'.format(self.problem['name']))
+        self.task = ground(self.problem, self.name)
+        logging.info('HDDL grounding end: {0}'.format(self.problem['name']))
+        logging.info('{0} Signs created'.format(len(self.task)))
+        return 0
 
     def sol_to_acronim(self, solution):
         acronim = ''
@@ -64,6 +76,7 @@ class MlAgent(Agent):
         This function is needed to synthesize all plans, choose the best one and
         save the experience.
         """
+        from mapmulti.search.mapsearch import MapSearch
         logging.info('Search start: {0}, Start time: {1} by agent: {2}'.format(self.task.name, time.clock(), self.name))
         connection_sign = self.task.signs["Send"]
         cms = connection_sign.spread_up_activity_motor('significance', 1)

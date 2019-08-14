@@ -90,7 +90,6 @@ class MapPlanner(MPcore):
         :return: the final solution
         """
         from mapmulti.hddl.hddl_parser import maHDDLParser
-        from mapcore.grounding.hddl_grounding import ground
         from mapcore.search.htnsearch import HTNSearch
         parser = maHDDLParser(self.domain, self.problem)
         logging.info('Parsing was finished...')
@@ -102,29 +101,19 @@ class MapPlanner(MPcore):
         logging.info('{0} Predicates parsed'.format(len(domain['predicates'])))
         logging.info('{0} Actions parsed'.format(len(domain['actions'])))
         logging.info('{0} Methods parsed'.format(len(domain['methods'])))
-        signs = ground(domain, problem)
-        logging.info('{0} Signs created'.format(len(signs)))
+        problem.update(domain)
+
         # htn = HTNSearch(signs)
         # solution = htn.search_plan()
 
-        act_agents = self.action_agents(problem)
-        logging.info('Agents found in actions: {0}'.format(len(act_agents)))
-        agents = set()
-        if problem.constraints:
-            if len(act_agents):
-                agents |= act_agents
-            else:
-                for constr in problem.constraints:
-                    agents.add(constr)
-                logging.info('Agents found in constraints: {0}'.format(len(agents)))
-        elif act_agents:
-            agents |= act_agents
-        else:
-            agents.add('I')
-            logging.info('Only 1 agent plan')
+        #act_agents = self.action_agents(problem)
+        agents = list(problem['constraints'].keys())
+        import re
+        problem_name = re.search('problem(.*)\)', parser.problem)
+        problem_name = problem_name.group(1)
+        problem['name'] = problem_name.strip()
 
-
-        manager = Manager(agents, problem, self.agpath, backward=self.backward)
+        manager = Manager(agents, problem, self.agpath, TaskType=self.TaskType)
         solution = manager.manage_agents()
         return solution
 

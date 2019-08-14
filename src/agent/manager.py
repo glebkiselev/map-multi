@@ -5,18 +5,24 @@ from multiprocessing.util import log_to_stderr
 from mapmulti.agent.agent_search import DecisionStrategies
 
 
-def agent_activation(agpath, agtype, name, agents, problem, backward, childpipe):
+def agent_activation(agpath, agtype, name, agents, problem, backward, TaskType, childpipe):
     # init agent
     class_ = getattr(importlib.import_module(agpath), agtype)
     workman = class_()
     workman.multinitialize(name, agents, problem, backward)
     # load SWM and calculate the amount of new signs
-    new_signs = workman.loadSWM()
+    if TaskType == 'mahddl':
+        new_signs = workman.loadHierarchy()
+    else:
+        new_signs = workman.loadSWM()
     childpipe.send((name, new_signs))
     # load info about the major agent
     major_agent = childpipe.recv()
     # search solution and send it to major agent
-    solution = workman.search_solution()
+    if TaskType == 'mahddl':
+        solution = workman.bulid_hierarchy()
+    else:
+        solution = workman.search_solution()
     childpipe.send(solution)
     if name == major_agent:
         # receive solution and create an auction
@@ -31,8 +37,9 @@ def agent_activation(agpath, agtype, name, agents, problem, backward, childpipe)
     solution_to_save = childpipe.recv()
     workman.save_solution(solution_to_save)
 
+
 class Manager:
-    def __init__(self, agents, problem, agpath = 'mapmulti.agent.agent_search', agtype = 'MlAgent', backward = True):
+    def __init__(self, agents, problem, agpath = 'mapmulti.agent.agent_search', agtype = 'MlAgent', backward = False, TaskType = 'mapddl'):
         self.problem = problem
         self.solution = []
         self.finished = None
@@ -43,6 +50,7 @@ class Manager:
         self.agents = agents
         self.logger = log_to_stderr()
         self.logger.setLevel(logging.INFO)
+        self.TaskType = TaskType
 
     def manage_agents(self):
 
@@ -50,9 +58,8 @@ class Manager:
 
         for ag in self.agents:
             parent_conn, child_conn = Pipe()
-
             p = Process(target=agent_activation,
-                        args=(self.agpath, self.agtype,ag, self.agents, self.problem, self.backward, child_conn, ))
+                        args=(self.agpath, self.agtype,ag, self.agents, self.problem, self.backward, self.TaskType, child_conn, ))
             allProcesses.append((p, parent_conn))
             p.start()
 

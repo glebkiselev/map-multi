@@ -47,7 +47,7 @@ class maHDDLParser(HTNParser):
                     block.setdefault(start_token[1:] + 's', []).append(parsed)
                 else:
                     parsed = getattr(bch, 'parse_' + start_token[1:])(part, block['init'], block['objects'])
-                    block.setdefault(start_token[1:], []).append(parsed)
+                    block.setdefault(start_token[1:], {}).update(parsed)
                 self.utokens.remove(start_token)
                 flag = True
         return block
