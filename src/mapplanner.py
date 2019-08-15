@@ -90,7 +90,6 @@ class MapPlanner(MPcore):
         :return: the final solution
         """
         from mapmulti.hddl.hddl_parser import maHDDLParser
-        from mapcore.search.htnsearch import HTNSearch
         parser = maHDDLParser(self.domain, self.problem)
         logging.info('Parsing was finished...')
         logging.info('Parsing Domain {0}'.format(self.domain))
@@ -102,11 +101,6 @@ class MapPlanner(MPcore):
         logging.info('{0} Actions parsed'.format(len(domain['actions'])))
         logging.info('{0} Methods parsed'.format(len(domain['methods'])))
         problem.update(domain)
-
-        # htn = HTNSearch(signs)
-        # solution = htn.search_plan()
-
-        #act_agents = self.action_agents(problem)
         agents = list(problem['constraints'].keys())
         import re
         problem_name = re.search('problem(.*)\)', parser.problem)

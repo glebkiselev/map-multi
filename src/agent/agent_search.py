@@ -11,7 +11,7 @@ class MlAgent(Agent):
         pass
 
     # Initialization pddl agent
-    def multinitialize(self, name, agents, problem, backward):
+    def multinitialize(self, name, agents, problem, TaskType, backward):
         """
         This function allows agent to be initialized. We do not use basic __init__ to let
         user choose a valid variant of agent.
@@ -25,6 +25,7 @@ class MlAgent(Agent):
         self.backward = backward
         self.others = {ag for ag in agents if ag != name}
         self.task = None
+        self.TaskType = TaskType
 
     def loadSWM(self):
         """
@@ -53,7 +54,7 @@ class MlAgent(Agent):
         logging.info('HDDL grounding start: {0}'.format(self.problem['name']))
         self.task = ground(self.problem, self.name)
         logging.info('HDDL grounding end: {0}'.format(self.problem['name']))
-        logging.info('{0} Signs created'.format(len(self.task)))
+        logging.info('{0} Signs created'.format(len(self.task.signs)))
         return 0
 
     def sol_to_acronim(self, solution):
@@ -71,29 +72,27 @@ class MlAgent(Agent):
             acronim += act[1] + ' ' + name + ';'
         return acronim
 
+
     def search_solution(self):
         """
         This function is needed to synthesize all plans, choose the best one and
         save the experience.
         """
-        from mapmulti.search.mapsearch import MapSearch
+        if self.TaskType == 'mahddl':
+            from mapmulti.search.htnsearch import HTNSearch as Search
+        else:
+            from mapmulti.search.mapsearch import MapSearch as Search
         logging.info('Search start: {0}, Start time: {1} by agent: {2}'.format(self.task.name, time.clock(), self.name))
-        connection_sign = self.task.signs["Send"]
-        cms = connection_sign.spread_up_activity_motor('significance', 1)
-        method = None
-        cm = None
-        for sign, action in cms:
-            for connector in sign.out_significances:
-                if len(self.others) > 1:
-                    method = action
-                    pm = connector.out_sign.significances[1]
-                    cm = pm.copy('significance', 'meaning')
-                elif len(self.others) == 1:
-                    method = action
-                    cm = connector.out_sign.significances[1].copy('significance', 'meaning')
-                elif len(self.others) == 0:
-                    method = 'save_achievement'
-        search = MapSearch(self.task, self.backward)
+        if len(self.others) > 1:
+            method = 'Broadcast'
+            cm = self.task.signs[method].significances[1].copy('significance', 'meaning')
+        elif len(self.others) == 1:
+            method = 'Approve'
+            cm = self.task.signs[method].significances[1].copy('significance', 'meaning')
+        else:
+            method = 'save_achievement'
+            cm = None
+        search = Search(self.task, self.backward)
         self.allsolutions = search.search_plan()
         self.solution = search.long_relations(self.allsolutions)
         if self.backward:
@@ -102,11 +101,10 @@ class MlAgent(Agent):
         for sol in self.allsolutions:
             acronim = self.sol_to_acronim(sol)
             sol_acronims.append(acronim)
-        self.solution = search.long_relations(self.allsolutions)
-        self.solution.append((connection_sign.add_meaning(), method, cm, self.task.signs["I"]))
+        self.solution.append((self.task.signs[method].add_meaning(), method, cm, self.task.signs["I"]))
 
         mes = Tmessage(self.solution, self.name)
-        message = getattr(mes, method)()
+        message = getattr(mes, method.lower())()
 
         return message
 

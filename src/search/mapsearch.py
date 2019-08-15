@@ -416,8 +416,8 @@ class MapSearch():
                 return False, pm
         return result, pm
 
-
-    def long_relations(self, plans):
+    @staticmethod
+    def long_relations(plans):
         logging.info("Choosing the plan for auction")
         min = len(plans[0])
         for plan in plans:

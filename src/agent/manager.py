@@ -9,7 +9,7 @@ def agent_activation(agpath, agtype, name, agents, problem, backward, TaskType, 
     # init agent
     class_ = getattr(importlib.import_module(agpath), agtype)
     workman = class_()
-    workman.multinitialize(name, agents, problem, backward)
+    workman.multinitialize(name, agents, problem, TaskType, backward)
     # load SWM and calculate the amount of new signs
     if TaskType == 'mahddl':
         new_signs = workman.loadHierarchy()
@@ -19,10 +19,7 @@ def agent_activation(agpath, agtype, name, agents, problem, backward, TaskType, 
     # load info about the major agent
     major_agent = childpipe.recv()
     # search solution and send it to major agent
-    if TaskType == 'mahddl':
-        solution = workman.bulid_hierarchy()
-    else:
-        solution = workman.search_solution()
+    solution = workman.search_solution()
     childpipe.send(solution)
     if name == major_agent:
         # receive solution and create an auction
@@ -35,7 +32,12 @@ def agent_activation(agpath, agtype, name, agents, problem, backward, TaskType, 
         childpipe.send(solution)
     # Save solution
     solution_to_save = childpipe.recv()
-    workman.save_solution(solution_to_save)
+    if TaskType == 'mapddl':
+        workman.save_solution(solution_to_save)
+    elif TaskType == 'mahddl':
+        logging.info("Agent {0} have finished building HTN task for {1}".format(name, problem.name))
+        logging.info("The final solution is:")
+        logging.info(solution_to_save)
 
 
 class Manager:

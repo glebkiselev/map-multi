@@ -1,6 +1,7 @@
 from mapcore.grounding.semnet import Sign
 from mapcore.search.htnsearch import mix_pairs
 from copy import copy
+from mapmulti.grounding.sign_task import Task
 
 signs = {}
 obj_signifs = {}
@@ -103,6 +104,8 @@ def preactivate_action_nonspecial(act_signif, constraints, plagent):
             for signa in signature:
                 roles = {cm.sign for cm in signs[signa].spread_up_activity_obj('significance', 2) if cm.sign in act_roles}
                 for role in roles:
+                    if signa == plagent:
+                        signa = 'I'
                     role_signifs.setdefault(role, set()).add(signs[signa])
 
         variants = mix_pairs(role_signifs)
@@ -298,6 +301,7 @@ def __ground_htn_subtask(name, args, problem):
         for connector in event.coincidences:
             cm = getattr(connector.out_sign, 'significances')[connector.out_index]
             acts.append(cm)
+    htn_methods = {}
     for stask, parameters in fin_meth.subtasks.items():
         bothel = [el for el in parameters[1] if el in chparams]
         if not bothel:
@@ -308,6 +312,9 @@ def __ground_htn_subtask(name, args, problem):
             htn_method = act.copy('significance', 'meaning')
         for sign, cm in change.items():
             htn_method.replace('meaning', sign, cm)
+        htn_methods[stask] = htn_method
+    for task in fin_meth.ordering:
+        htn_method = htn_methods[task]
         connector = fin_meth_mean.add_feature(htn_method)
         htn_method.sign.add_out_meaning(connector)
 
@@ -353,7 +360,6 @@ def _create_methods_tree(domain):
     tree = collections.OrderedDict(sorted(tree.items()))
 
     return tree
-
 
 def ground(problem, plagent):
     # ground I and They
@@ -427,6 +433,7 @@ def ground(problem, plagent):
 
 
     #Ground htns to meanings
+    htn_means = []
     for htn in problem['htns']:
         htn_name = 'htn_' + str(problem['htns'].index(htn))+'_%s'%problem['name']
         htn_sign = __add_sign(htn_name, False)
@@ -436,8 +443,12 @@ def ground(problem, plagent):
             cm = __ground_htn_subtask(subtask[0], subtask[1], problem)
             connector = htn_mean.add_feature(cm)
             cm.sign.add_out_meaning(connector)
+        htn_means.append(htn_mean)
 
-    return signs
+    from mapmulti.grounding.pddl_grounding import signify_connection
+    signify_connection(signs)
+
+    return Task(problem['name'], signs, sit_im, htn_means)
 
 
 

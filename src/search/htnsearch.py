@@ -10,17 +10,16 @@ import itertools
 MAX_CL_LV = 1
 
 class HTNSearch():
-    def __init__ (self, signs):
-        self.world_model = signs
+    def __init__ (self, task, backward):
+        self.world_model = task.signs
         self.MAX_ITERATION = 30
         self.exp_acts = []
         self.exp_sits = []
-        self.htn = self.world_model['htn_0'].meanings[1]
+        self.htn = task.goal_situation[0].sign.meanings[1]
         self.scenario = self.htn.spread_down_htn_activity_act('meaning', 4)
-        self.active_pm = self.world_model['*start 0*'].images[1]
+        self.active_pm = task.start_situation
+        self.backward = backward
         logging.debug('Start: {0}'.format(self.active_pm.longstr()))
-        # logging.basicConfig(level=logging.INFO)
-        # logger = logging.getLogger("process-%r" % ('I'))
 
     def search_plan(self):
         self.I_sign, self.I_obj, self.agents = self.__get_agents()
@@ -33,7 +32,8 @@ class HTNSearch():
         for agent, cm in meanings:
             result, checked = self._check_activity(cm, active_pm.sign.meanings[1], backward=False)
             if result:
-                applicable_meanings.append((agent, checked))
+                if len(checked.cause) == len(cm.cause):
+                    applicable_meanings.append((agent, checked))
         return applicable_meanings
 
     def _map_iteration(self, active_pm, iteration, current_plan, prev_state = []):
@@ -182,6 +182,10 @@ class HTNSearch():
             I_obj = I_objects[0]
         else:
             I_obj = None
+        They_sign = self.world_model["They"]
+        agents = They_sign.spread_up_activity_obj("significance", 1)
+        for cm in agents:
+            agent_back.add(cm.sign)
         return I_sign, I_obj, agent_back
 
 
@@ -276,7 +280,7 @@ class HTNSearch():
                     return index
             return None
 
-        # # Find already changed roles
+        # Find already changed roles
         changed_roles = {}
         pm_chains = action_meaning.spread_down_activity('meaning', 5)
         for chain in pm_chains:
@@ -285,6 +289,7 @@ class HTNSearch():
                     changed_roles.setdefault(chain[-1], set()).add(achain[-3].sign)
 
         replace_map = {}
+        # Create a replace_map - dict vs role_sign:cm of object to replace
         changed_signs = [cm.sign for cm in changed_roles]
         for chain in pm_chains:
             index = __get_role_index(chain)
@@ -293,25 +298,71 @@ class HTNSearch():
                 if to_replace:
                     replace_map.setdefault(chain[index].sign, set()).update(to_replace)
 
+        # search already build actions
+        connectors = [agent.out_meanings for agent in self.agents]
+        main_pm_len = len(action_meaning.cause) + len(action_meaning.effect) + 2
+        rkeys = {el for el in replace_map.keys()}
+
+        mapped_actions = {}
+        for agent_con in connectors:
+            for con in agent_con:
+                if con.in_sign == action_meaning.sign:
+                    mapped_actions.setdefault(con.out_sign, set()).add(con.in_sign.meanings[con.in_index])
+
         pms = []
 
-        ma_combinations = mix_pairs(replace_map)
-
-        for ma_combination in ma_combinations:
-            cm = action_meaning.copy('meaning', 'meaning')
-            for role_sign, obj_pm in ma_combination.items():
-                obj_cm = obj_pm.copy('significance', 'meaning')
-                cm.replace('meaning', role_sign, obj_cm)
-            if not pms:
-                pms.append((ma_combination[self.world_model['agent?ag']].sign, cm))
-            else:
-                for _, pmd in copy(pms):
-                    if pmd.resonate('meaning', cm):
-                        break
+        for agent, actions in mapped_actions.items():
+            for act in actions:
+                objects_cms = set()
+                act_meanings = act.spread_down_activity('meaning', 5)
+                for chain in act_meanings:
+                    obj = chain[-1].sign
+                    if obj != agent and len(obj.significances) == 1:
+                        if obj.significances[1].is_empty():
+                            objects_cms.add(chain[-1])
+                if objects_cms:
+                    for obj in objects_cms:
+                        if obj not in changed_roles.keys():
+                            break
+                    else:
+                        replace_map.setdefault(self.world_model['agent?ag'], set()).add(agent.add_meaning())
                 else:
+                    replace_map.setdefault(self.world_model['agent?ag'], set()).add(agent.add_meaning())
+
+        if replace_map:
+            ma_combinations = mix_pairs(replace_map)
+
+            for ma_combination in ma_combinations:
+                cm = action_meaning.copy('meaning', 'meaning')
+                for role_sign, obj_pm in ma_combination.items():
+                    obj_cm = obj_pm.copy('significance', 'meaning')
+                    cm.replace('meaning', role_sign, obj_cm)
+                if ma_combination[self.world_model['agent?ag']].sign.name == 'I':
+                    I_mean = self.world_model['I'].add_meaning()
+                    connector = cm.add_feature(I_mean)
+                    efconnector = cm.add_feature(I_mean, effect=True)
+                    self.world_model['I'].add_out_meaning(connector)
+                else:
+                    ag_sign = ma_combination[self.world_model['agent?ag']].sign
+                    ag_mean = ag_sign.add_meaning()
+                    connector = cm.add_feature(ag_mean)
+                    efconnector = cm.add_feature(ag_mean, effect=True)
+                    ag_sign.add_out_meaning(connector)
+                if not pms:
                     pms.append((ma_combination[self.world_model['agent?ag']].sign, cm))
+                else:
+                    for _, pmd in copy(pms):
+                        if pmd.resonate('meaning', cm):
+                            break
+                    else:
+                        pms.append((ma_combination[self.world_model['agent?ag']].sign, cm))
 
         return pms
+
+    def long_relations(self, plans):
+        from mapmulti.search.mapsearch import MapSearch
+        cheapest = MapSearch.long_relations(plans)
+        return cheapest
 
 def mix_pairs(replace_map):
     """
