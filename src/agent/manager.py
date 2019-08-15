@@ -35,7 +35,7 @@ def agent_activation(agpath, agtype, name, agents, problem, backward, TaskType, 
     if TaskType == 'mapddl':
         workman.save_solution(solution_to_save)
     elif TaskType == 'mahddl':
-        logging.info("Agent {0} have finished building HTN task for {1}".format(name, problem.name))
+        logging.info("Agent {0} have finished building HTN task for {1}".format(name, problem['name']))
         logging.info("The final solution is:")
         logging.info(solution_to_save)
 
