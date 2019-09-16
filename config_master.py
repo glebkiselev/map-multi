@@ -3,28 +3,30 @@ import os
 import sys
 import pkg_resources
 
-def create_config(task_num = '1', refinement_lv = '1', benchmark = None, delim = '/', backward = 'True', task_type = 'classic'):
+def create_config(domen = 'blocks', task_num = '1', refinement_lv = '1', benchmark = None, delim = '/', backward = 'True', task_type = 'classic'):
     """
     Create a config file for map-multi algorithm
     """
+    domain = 'domain'
     if not benchmark:
         if task_type == 'mapddl':
-            folder = 'mapddl'+delim+ 'blocks'+delim
+            folder = 'mapddl'+delim + domen + delim
             ext = '.pddl'
         elif task_type == 'mahddl':
-            folder = 'mahddl'+delim+ 'blocks'+delim
-            ext = '.hddl'
-        elif task_type == 'htn':
-            folder = 'hierarchical' +delim
+            folder = 'mahddl'+delim + domen + delim
             ext = '.hddl'
         else:
-            print('Wrong task_type!!! (classic, htn, mahddl or mapddl)!!')
+            print('Wrong task_type!!! (mahddl or mapddl)!!')
             sys.exit(1)
-        path_bench = 'benchmarks' +delim + folder
+        path_bench = 'benchmarks' + delim + folder
         if not isinstance(task_num, str):
             task_num = str(task_num)
         p_FILE = pkg_resources.resource_filename('mapmulti', path_bench+'task'+task_num+ext)
-        domain_load = pkg_resources.resource_filename('mapmulti', path_bench+'domain'+ext)
+        try:
+            domain_load = pkg_resources.resource_filename('mapmulti', path_bench+domain+ext)
+        except KeyError:
+            domain = domain+task_num
+            domain_load = pkg_resources.resource_filename('mapmulti', path_bench + domain + ext)
         path = "".join([p.strip() + delim for p in p_FILE.split(delim)[:-1]])
     else:
         splited = benchmark.split(delim)
@@ -34,10 +36,11 @@ def create_config(task_num = '1', refinement_lv = '1', benchmark = None, delim =
 
     config = configparser.ConfigParser()
     config.add_section("Settings")
+    config.set("Settings", "domain", domain)
     config.set("Settings", "path", path)
     config.set("Settings", "task", task_num)
-    config.set("Settings", "agpath", "mapmulti.agent.agent_search")
-    config.set("Settings", "agtype", "Agent")
+    config.set("Settings", "agpath", "mapmulti.agent.planning_agent")
+    config.set("Settings", "agtype", "MAgent")
     config.set("Settings", "backward", backward)
     config.set("Settings", "refinement_lv", refinement_lv)
     config.set("Settings", "TaskType", task_type)

@@ -1,7 +1,8 @@
 import logging
 import os
-from mapcore.mapplanner import MapPlanner as MPcore
-from mapmulti.agent.manager import Manager
+
+from mapcore.planning.mapplanner import MapPlanner as MPcore
+from mapmulti.agent.planning_agent import Manager
 SOLUTION_FILE_SUFFIX = '.soln'
 
 import platform
@@ -17,36 +18,6 @@ logger = logging.getLogger("process-main")
 class MapPlanner(MPcore):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        #self.domain, self.problem = self.find_domain(self.kwgs['path'], self.kwgs['task'])
-
-    def find_domain(self, path, number):
-        """
-        Domain search function
-        :param path: path to current task
-        :param number: task number
-        :return:
-        """
-        if self.TaskType == 'htn' or self.TaskType == 'mahddl':
-            ext = '.hddl'
-        else:
-            ext = '.pddl'
-        task = 'task' + number + ext
-        domain = 'domain' + ext
-
-        if not domain in os.listdir(path):
-            domain2 = self.search_upper(path, domain)
-            if not domain2:
-                raise Exception('domain not found!')
-            else:
-                domain = domain2
-        else:
-            domain = path + domain
-        if not task in os.listdir(path):
-            raise Exception('task not found!')
-        else:
-            problem = path + task
-
-        return domain, problem
 
     def action_agents(self, problem):
         agents = set()
@@ -57,13 +28,12 @@ class MapPlanner(MPcore):
                         agents.add(obj)
         return agents
 
-    def search_multi(self):
+    def _parse_mapddl(self):
         """
-        multiagent plan search for clasically
-        :return: the final solution. It is choosed from the set of all solutions, using auction
+        multiagent pddl parser and agents search
         """
 
-        problem = self._parse(self.domain, self.problem)
+        problem = self._parse_pddl()
         act_agents = self.action_agents(problem)
         logging.info('Agents found in actions: {0}'.format(len(act_agents)))
         agents = set()
@@ -79,48 +49,71 @@ class MapPlanner(MPcore):
         else:
             agents.add('I')
             logging.info('Only 1 agent plan')
+        return agents, problem
 
-        manager = Manager(agents, problem, self.agpath, backward=self.backward)
-        solution = manager.manage_agents()
-        return solution
-
-    def search_mhddl(self):
+    def _parse_mahddl(self):
         """
-        classic HTN-based plan search. Multiagent version.
+        multiagent HTN-based parser and agents search
         :return: the final solution
         """
-        from mapmulti.hddl.hddl_parser import maHDDLParser
+        from mapmulti.parsers.hddl_parser import maHDDLParser
         parser = maHDDLParser(self.domain, self.problem)
         logging.info('Parsing was finished...')
         logging.info('Parsing Domain {0}'.format(self.domain))
         domain = parser.ParseDomain(parser.domain)
         logging.info('Parsing Problem {0}'.format(self.problem))
-        problem = parser.ParseProblem(parser.problem)
-        logging.info('{0} Objects parsed'.format(len(problem['objects'])))
+        problem = parser.ParseProblem(parser.problem, domain)
         logging.info('{0} Predicates parsed'.format(len(domain['predicates'])))
         logging.info('{0} Actions parsed'.format(len(domain['actions'])))
         logging.info('{0} Methods parsed'.format(len(domain['methods'])))
-        problem.update(domain)
-        agents = list(problem['constraints'].keys())
-        import re
-        problem_name = re.search('problem(.*)\)', parser.problem)
-        problem_name = problem_name.group(1)
-        problem['name'] = problem_name.strip()
+        agents = list(problem.constraints.keys())
+        return agents, problem
 
-        manager = Manager(agents, problem, self.agpath, TaskType=self.TaskType)
-        solution = manager.manage_agents()
-        return solution
+    def find_domain(self, domain, path, number):
+        """
+        Domain search function
+        :param path: path to current task
+        :param number: task number
+        :return:
+        """
+        ext = '.pddl'
+        if self.TaskType == 'mahddl':
+            ext = '.hddl'
+        task = 'task' + number + ext
+        domain += ext
+        if not domain in os.listdir(path):
+            domain2 = self.search_upper(path, domain)
+            if not domain2:
+                raise Exception('domain not found!')
+            else:
+                domain = domain2
+        else:
+            domain = path + domain
+        if not task in os.listdir(path):
+            raise Exception('task not found!')
+        else:
+            problem = path + task
+
+        return domain, problem
+
 
 
     def search(self):
-        if self.TaskType == 'classic':
-            return self.search_classic()
-        elif self.TaskType == 'htn':
-            return self.search_htn()
+        if self.TaskType == 'hddl':
+            problem = self._parse_hddl()
+            agents = set('I')
+        elif self.TaskType == 'pddl':
+            problem = self._parse_pddl()
+            agents = set('I')
         elif self.TaskType == 'mapddl':
-            return self.search_multi()
+            agents, problem = self._parse_mapddl()
         elif self.TaskType == 'mahddl':
-            return self.search_mhddl()
+            agents, problem = self._parse_mahddl()
         else:
-            raise Exception('You are using multiagent lib without extensions. Tasks can be classic, htn or multi!!!')
+            raise Exception('You are using multiagent lib without extensions. Tasks can be pddl, hddl, mapddl or mahddl!!!')
+        logger.info('Parsing was finished...')
+        manager = Manager(agents, problem, self.agpath, TaskType = self.TaskType, backward=self.backward)
+        solution = manager.manage_agents()
+
+        return solution
 

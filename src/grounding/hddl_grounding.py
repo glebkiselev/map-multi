@@ -1,11 +1,101 @@
-from mapcore.grounding.semnet import Sign
-from mapcore.search.htnsearch import mix_pairs
+from mapcore.swm.src.components.semnet import Sign
+from mapcore.planning.search.mapsearch import mix_pairs
 from copy import copy
-from mapmulti.grounding.sign_task import Task
+from mapcore.planning.grounding.planning_task import PlanningTask as Task
 
 signs = {}
 obj_signifs = {}
 obj_means = {}
+
+def ground(problem, plagent, exp_signs = None):
+    # ground I and They
+    domain = problem.domain
+    I_sign = Sign("I")
+    obj_means[I_sign] = I_sign.add_meaning()
+    obj_signifs[I_sign] = I_sign.add_significance()
+    signs[I_sign.name] = I_sign
+    They_sign = Sign("They")
+    obj_means[They_sign] = They_sign.add_meaning()
+    obj_signifs[They_sign] = They_sign.add_significance()
+    signs[They_sign.name] = They_sign
+
+    for type, stype in domain['types']:
+        stype_sign = __add_sign(stype)
+        stype_signif = stype_sign.add_significance()
+        type_sign = __add_sign(type)
+        connector = stype_signif.add_feature(obj_signifs[type_sign], zero_out=True)
+        type_sign.add_out_significance(connector)
+
+    for obj, type in problem.objects:
+        obj_sign = __add_sign(obj)
+        obj_means[obj_sign] = obj_sign.add_meaning()
+        type_sign = signs[type]
+        tp_signif = type_sign.add_significance()
+        connector = tp_signif.add_feature(obj_signifs[obj_sign], zero_out=True)
+        obj_sign.add_out_significance(connector)
+        if obj_sign.name == plagent:
+            connector = obj_signifs[obj_sign].add_feature(obj_signifs[I_sign], zero_out=True)
+            I_sign.add_out_significance(connector)
+            obj_means[obj_sign] = obj_sign.add_meaning()
+
+    others = set()
+    for id in range(1, len(signs['agent'].significances)+1):
+        other_ag = signs['agent'].significances[id].get_signs()
+        if signs[plagent] not in other_ag:
+            others |= other_ag
+
+    for subagent in others:
+        if subagent.name != plagent:
+            if not They_sign in subagent.significances[1].get_signs():
+                signif = obj_signifs[They_sign]
+                if signif.is_empty():
+                    They_signif = signif
+                else:
+                    They_signif = They_sign.add_significance()
+                connector = subagent.significances[1].add_feature(They_signif, zero_out=True)
+                They_sign.add_out_significance(connector)
+                obj_means[subagent] = subagent.add_meaning()
+
+    for predicate in domain['predicates']:
+        _ground_predicate(predicate.name, predicate.signature)
+
+    for action in domain['actions']:
+        _ground_action(action.name, action.parameters, action.preconditions, action.effect, problem.constraints, plagent)
+
+    for task in domain['tasks']:
+        __add_sign(task.name, False)
+
+    methods = sorted(domain['methods'], key=lambda method: len(method.subtasks))
+    for method in methods:
+        __ground_method(method.parameters, method.subtasks, method.ordering, method.task, domain, 2)
+
+    # Ground Init
+    start = __add_sign('*start %s*' % str(problem.name), False)
+    sit_im = start.add_image()
+    for predicate in problem.init:
+        pred_im = _ground_htn_predicate(predicate.name, predicate.signature, plagent)
+        connector = sit_im.add_feature(pred_im)
+        pred_im.sign.add_out_image(connector)
+    sit_im.copy('image', 'meaning')
+
+    # Ground htns to meanings
+    goal = None
+    subtasks = []
+    for htn in problem.htns:
+        htn_name = 'htn_' + str(problem.htns.index(htn))
+        htn_sign = __add_sign(htn_name, False)
+        htn_mean = htn_sign.add_meaning()
+        for task in htn.ordering:
+            subtask = htn.subtasks[task]
+            cm = __ground_htn_subtask(subtask[0], subtask[1], domain)
+            connector = htn_mean.add_feature(cm)
+            cm.sign.add_out_meaning(connector)
+        subtasks.append(htn_sign)
+
+    from mapmulti.grounding.pddl_grounding import signify_connection
+    signify_connection(signs)
+
+    return Task(problem.name, signs, start, goal, subtasks)
 
 
 def __add_sign(sname, need_signif = True):
@@ -361,94 +451,7 @@ def _create_methods_tree(domain):
 
     return tree
 
-def ground(problem, plagent):
-    # ground I and They
-    I_sign = Sign("I")
-    obj_means[I_sign] = I_sign.add_meaning()
-    obj_signifs[I_sign] = I_sign.add_significance()
-    signs[I_sign.name] = I_sign
-    They_sign = Sign("They")
-    obj_means[They_sign] = They_sign.add_meaning()
-    obj_signifs[They_sign] = They_sign.add_significance()
-    signs[They_sign.name] = They_sign
 
-    for type, stype in problem['types']:
-        stype_sign = __add_sign(stype)
-        stype_signif = stype_sign.add_significance()
-        type_sign = __add_sign(type)
-        connector = stype_signif.add_feature(obj_signifs[type_sign], zero_out=True)
-        type_sign.add_out_significance(connector)
-
-    for obj, type in problem['objects']:
-        obj_sign = __add_sign(obj)
-        obj_means[obj_sign] = obj_sign.add_meaning()
-        type_sign = signs[type]
-        tp_signif = type_sign.add_significance()
-        connector = tp_signif.add_feature(obj_signifs[obj_sign], zero_out=True)
-        obj_sign.add_out_significance(connector)
-        if obj_sign.name == plagent:
-            connector = obj_signifs[obj_sign].add_feature(obj_signifs[I_sign], zero_out=True)
-            I_sign.add_out_significance(connector)
-            obj_means[obj_sign] = obj_sign.add_meaning()
-
-    others = set()
-    for id in range(1, len(signs['agent'].significances)+1):
-        other_ag = signs['agent'].significances[id].get_signs()
-        if signs[plagent] not in other_ag:
-            others |= other_ag
-
-    for subagent in others:
-        if subagent.name != plagent:
-            if not They_sign in subagent.significances[1].get_signs():
-                signif = obj_signifs[They_sign]
-                if signif.is_empty():
-                    They_signif = signif
-                else:
-                    They_signif = They_sign.add_significance()
-                connector = subagent.significances[1].add_feature(They_signif, zero_out=True)
-                They_sign.add_out_significance(connector)
-                obj_means[subagent] = subagent.add_meaning()
-
-    for predicate in problem['predicates']:
-        _ground_predicate(predicate.name, predicate.signature)
-
-    for action in problem['actions']:
-        _ground_action(action.name, action.parameters, action.preconditions, action.effect, problem['constraints'], plagent)
-
-    for task in problem['tasks']:
-        __add_sign(task.name, False)
-
-    methods = sorted(problem['methods'], key=lambda method: len(method.subtasks))
-    for method in methods:
-        __ground_method(method.parameters, method.subtasks, method.ordering, method.task, problem, 2)
-
-    #Ground Init
-    start = __add_sign('*start %s*'%problem['name'], False)
-    sit_im = start.add_image()
-    for predicate in problem['init']:
-        pred_im = _ground_htn_predicate(predicate.name, predicate.signature, plagent)
-        connector = sit_im.add_feature(pred_im)
-        pred_im.sign.add_out_image(connector)
-    sit_im.copy('image', 'meaning')
-
-
-    #Ground htns to meanings
-    htn_means = []
-    for htn in problem['htns']:
-        htn_name = 'htn_' + str(problem['htns'].index(htn))+'_%s'%problem['name']
-        htn_sign = __add_sign(htn_name, False)
-        htn_mean = htn_sign.add_meaning()
-        for task in htn.ordering:
-            subtask = htn.subtasks[task]
-            cm = __ground_htn_subtask(subtask[0], subtask[1], problem)
-            connector = htn_mean.add_feature(cm)
-            cm.sign.add_out_meaning(connector)
-        htn_means.append(htn_mean)
-
-    from mapmulti.grounding.pddl_grounding import signify_connection
-    signify_connection(signs)
-
-    return Task(problem['name'], signs, sit_im, htn_means)
 
 
 

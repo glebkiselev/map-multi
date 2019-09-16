@@ -1,33 +1,47 @@
 import logging
 
-import mapcore.grounding.sign_task as st
+import mapcore.swm.src.components.sign_task as st
 import random
-from mapcore.grounding.semnet import Sign
+from mapcore.swm.src.components.semnet import Sign
+from mapcore.planning.search.mapsearch import mix_pairs
 from copy import copy
 import itertools
 
 
 MAX_CL_LV = 1
+'''
+Activity coefficient - the average value of 
+the depth of activity spreading in the sign 
+world model for the present task
+'''
+A_C = 4
 
 class MapSearch():
-    def __init__ (self, task, backward):
+    def __init__ (self, task, TaskType, backward):
         self.world_model = task.signs
-        self.MAX_ITERATION = 7
+        self.MAX_ITERATION = 10
         self.exp_acts = []
         self.exp_sits = []
         self.backward = backward
-
-        if self.backward:
-            self.check_pm = task.start_situation.images[1]
-            self.active_pm = task.goal_situation.images[1]
-        else:
-            self.check_pm = task.goal_situation.images[1]
+        self.TaskType = TaskType
+        self.scenario = None
+        self.final_plans = []
+        if TaskType == 'mapddl':
+            self.MAX_ITERATION = 30
+            if self.backward:
+                self.check_pm = task.start_situation.images[1]
+                self.active_pm = task.goal_situation.images[1]
+            else:
+                self.check_pm = task.goal_situation.images[1]
+                self.active_pm = task.start_situation.images[1]
+        elif task.subtasks and TaskType == 'mahddl':
+            self.scenario = task.subtasks[0].meanings[1].spread_down_htn_activity_act('meaning', A_C)
+            self.MAX_ITERATION = len(self.scenario)
             self.active_pm = task.start_situation.images[1]
-
+            self.check_pm = task.goal_situation
+        else:
+            logging.info("Cant find the goal situation in task %s" % task.name)
         self.precedents = set()
-
-        logging.debug('Start: {0}'.format(self.check_pm.longstr()))
-        logging.debug('Finish: {0}'.format(self.active_pm.longstr()))
 
     def search_plan(self):
         self.I_sign, self.I_obj, self.agents = self.__get_agents()
@@ -47,7 +61,6 @@ class MapSearch():
                 if result:
                     precedents.append((agent, checked))
         return precedents
-
 
     def _precedent_activation(self):
         if not self.exp_sits:
@@ -71,8 +84,8 @@ class MapSearch():
         for agent, cm in meanings:
             result, checked = self._check_activity(cm, active_pm.sign.meanings[1], self.backward)
             if result:
-                maxlen = max([len(ev.coincidences) for ev in checked.cause])
-                if maxlen != 1:
+                maxlen = max([len(el) for el in checked.spread_down_activity('meaning', A_C)])
+                if maxlen != 2:
                     applicable_meanings.add((agent, checked))
         return applicable_meanings
 
@@ -96,30 +109,45 @@ class MapSearch():
 
         precedents = self._precedent_search(active_pm)
 
-        active_chains = active_pm.spread_down_activity('image', 4)
-        active_signif = set()
+        act_matrice = None
+        if self.scenario:
+            act_matrice = self.scenario[iteration]
+
+        active_chains = active_pm.spread_down_activity('image', A_C)
+        active_signifs = dict()
 
         for chain in active_chains:
             pm = chain[-1]
-            active_signif |= pm.sign.spread_up_activity_act('significance', 3)
+            active_signif = pm.sign.spread_up_activity_act('significance', A_C)
+            for signif in active_signif:
+                if signif.sign not in active_signifs:
+                    active_signifs.setdefault(signif.sign, set()).update({el for el in active_signif if el.sign.name == signif.sign.name})
+        if act_matrice:
+            active_signifs = {key:value for key, value in active_signifs.items() if key == act_matrice.sign}
 
         self._experience_parts(precedents)
 
         meanings = []
-        for pm_signif in active_signif:
-            chains = pm_signif.spread_down_activity('significance', 6)
+        for pm_signif, ams in active_signifs.items():
+            chains = []
+            for am in ams:
+                chains.extend(am.spread_down_activity('significance', A_C))
             merged_chains = []
             for chain in chains:
                 for achain in active_chains:
                     if chain[-1].sign == achain[-1].sign and len(chain) > 2 and chain not in merged_chains:
                         merged_chains.append(chain)
                         break
-            scripts = self._generate_meanings(merged_chains)
+            scripts = self._generate_meanings(merged_chains, act_matrice)
+            logging.debug("Generated {0} scripts for {1} action on step {2}".format(str(len(scripts)), pm_signif.name, str(iteration)))
             meanings.extend(scripts)
 
         applicable_meanings = self.applicable_search(precedents + meanings, active_pm)
 
-        candidates = self._meta_check_activity(active_pm, applicable_meanings, [x for x, _, _, _ in current_plan])
+        if self.check_pm:
+            candidates = self._meta_check_activity(active_pm, applicable_meanings, [x for x, _, _, _ in current_plan])
+        else:
+            candidates = [(0, script.sign.name, script, agent) for agent, script in applicable_meanings]
 
         if not candidates:
             logging.debug('\tNot found applicable scripts ({0})'.format([x for _, x, _, _ in current_plan]))
@@ -149,16 +177,21 @@ class MapSearch():
                 logging.info(
                     'action {0} was changed to {1}'.format(script.sign.name, [part[1] for part in subplan]))
                 prev_state.append(active_pm)
-            if next_pm.includes('image', self.check_pm):
-                final_plans.append(plan)
-                plan_actions = [x.sign.name for _, _, x, _ in plan]
+            _isbuild = False
+            if self.check_pm:
+                if next_pm.includes('image', self.check_pm):
+                    _isbuild = True
+            elif self.check_pm is None and iteration == self.MAX_ITERATION - 1:
+                _isbuild = True
+            if _isbuild:
+                final_plans.append((plan, next_pm.sign))
+                plan_actions = [(ag_mask.name, act.sign.name) for _, _, act, ag_mask in plan]
                 logging.info("len of detected plan is: {0}".format(len(plan)))
                 logging.info(plan_actions)
             else:
                 recursive_plans = self._map_iteration(next_pm, iteration + 1, plan, prev_state)
                 if recursive_plans:
                     final_plans.extend(recursive_plans)
-
         return final_plans
 
 
@@ -252,7 +285,7 @@ class MapSearch():
             agent_back.add(cm.sign)
         return I_sign, I_obj, agent_back
 
-    def _generate_meanings(self, chains):
+    def _generate_meanings(self, chains, sm=None):
         def __get_role_index(chain):
             index = 0
             rev_chain = reversed(chain)
@@ -268,20 +301,24 @@ class MapSearch():
                     return index
             return None
 
-        def __get_big_role_index(chain):
-            index = None
-            for el in chain:
-                if len(el.cause) == 1:
-                    if len(el.cause[0].coincidences) ==1:
-                        index = chain.index(el)
-                        break
+        def __generator(combinations, pms, pm_signs, pm, agent):
+            for combination in combinations:
+                cm = pm.copy('meaning', 'meaning')
+                for role_sign, obj_pm in combination.items():
+                    if role_sign in pm_signs:
+                        if obj_pm.sign in pm_signs:
+                            continue
+                        obj_cm = obj_pm.copy('significance', 'meaning')
+                        cm.replace('meaning', role_sign, obj_cm)
+                if not pms:
+                    pms.append((agent, cm))
                 else:
-                    continue
-            if index:
-                return index
-            return None
-
-        big_replace = {}
+                    for _, pmd in copy(pms):
+                        if pmd.resonate('meaning', cm):
+                            break
+                    else:
+                        pms.append((agent, cm))
+            return pms
 
         replace_map = {}
         main_pm = None
@@ -293,13 +330,6 @@ class MapSearch():
                 else:
                     if not chain[-1] in replace_map[chain[role_index].sign]:
                         replace_map[chain[role_index].sign].append(chain[-1])
-            role_index = __get_big_role_index(chain)
-            if role_index:
-                if not chain[role_index].sign in big_replace:
-                    big_replace[chain[role_index].sign] = [chain[role_index + 1]]
-                else:
-                    if not chain[role_index + 1] in big_replace[chain[role_index].sign]:
-                        big_replace[chain[role_index].sign].append(chain[role_index + 1])
                 main_pm = chain[0]
 
         connectors = [agent.out_meanings for agent in self.agents]
@@ -336,55 +366,43 @@ class MapSearch():
                                 break
                         else:
                             pms.append((agent, pm))
-            old_pms = []
-
-            for pm in lpm:
-                if len(pm.cause) + len(pm.effect) != main_pm_len:
-                    continue
-                pm_signs = set()
-                pm_mean = pm.spread_down_activity('meaning', 3)
-                for pm_list in pm_mean:
-                    pm_signs |= set([c.sign for c in pm_list])
-                if pm_signs not in old_pms:
-                    old_pms.append(pm_signs)
-                else:
-                    continue
-                role_signs = rkeys & pm_signs
-                for role_sign in role_signs:
-                    new_map[role_sign] = replace_map[role_sign]
-
-                for chain in pm_mean:
-                    if chain[-1].sign in big_replace and not chain[-1].sign in new_map :
-                        for cm in big_replace.get(chain[-1].sign):
-                            if self.world_model['cell?x'] in cm.get_signs() and self.world_model['cell?y'] in cm.get_signs():
-                                new_map[chain[-1].sign] = [cm]
-
-
-                ma_combinations = self.mix_pairs(new_map)
-
-                for ma_combination in ma_combinations:
-                    cm = pm.copy('meaning', 'meaning')
-                    breakable = False
-                    for role_sign, obj_pm in ma_combination.items():
-                        if obj_pm.sign in pm_signs:
-                            breakable = True
-                            break
-                        obj_cm = obj_pm.copy('significance', 'meaning')
-                        cm.replace('meaning', role_sign, obj_cm)
-                    if breakable:
+        if not sm:
+            for agent, lpm in mapped_actions.items():
+                for pm in lpm:
+                    if len(pm.cause) + len(pm.effect) != main_pm_len:
                         continue
-
-                    if not pms:
-                        pms.append((agent, cm))
-                    else:
-                        for _, pmd in copy(pms):
-                            if pmd.resonate('meaning', cm):
-                                break
-                        else:
-                            pms.append((agent, cm))
-                if len(old_pms) == 64:
-                    break
-
+                    pm_signs = set()
+                    pm_mean = pm.spread_down_activity('meaning', 3)
+                    for pm_list in pm_mean:
+                        pm_signs |= set([c.sign for c in pm_list])
+                    role_signs = rkeys & pm_signs
+                    for role_sign in role_signs:
+                        new_map[role_sign] = replace_map[role_sign]
+                    combinations = mix_pairs(new_map)
+                    pms = __generator(combinations, pms, pm_signs, pm, agent)
+        else:
+            sm_chains = sm.spread_down_activity('meaning', A_C)
+            sm_signs = set()
+            for chain in sm_chains:
+                sm_signs |= set([c.sign for c in chain])
+            changed_signs = set()
+            for role, rms in replace_map.items():
+                changed_signs |= {cm.sign for cm in rms if cm.sign in sm_signs}
+            for agent, actions in mapped_actions.items():
+                for action in actions:
+                    act_chains = action.spread_down_activity('meaning', A_C)
+                    act_signs = set()
+                    for chain in act_chains:
+                        act_signs |= set([c.sign for c in chain])
+                    combinations = mix_pairs(replace_map)
+                    pms = __generator(combinations, pms, act_signs, action, agent)
+            for pair in pms.copy():
+                pm_chains = pair[1].spread_down_activity('meaning', A_C)
+                pm_signs = set()
+                for chain in pm_chains:
+                    pm_signs |= set([c.sign for c in chain])
+                if not pm_signs.issuperset(changed_signs):
+                    pms.remove(pair)
         return pms
 
     def _check_activity(self, pm, next_cm, backward = False, prec_search = False):
@@ -415,80 +433,6 @@ class MapSearch():
                 expanded.sign.remove_meaning(expanded)
                 return False, pm
         return result, pm
-
-    @staticmethod
-    def long_relations(plans):
-        logging.info("Choosing the plan for auction")
-        min = len(plans[0])
-        for plan in plans:
-            if len(plan) < min:
-                min = len(plan)
-        plans = [plan for plan in plans if len(plan) == min]
-
-        busiest = []
-        for index, plan in enumerate(plans):
-            previous_agent = ""
-            agents = {}
-            counter = 0
-            plan_agents = []
-            for action in plan:
-                if action[3] not in agents:
-                    agents[action[3]] = 1
-                    previous_agent = action[3]
-                    counter = 1
-                    if not action[3] is None:
-                        plan_agents.append(action[3].name)
-                    else:
-                        plan_agents.append(str(action[3]))
-                elif not previous_agent == action[3]:
-                    previous_agent = action[3]
-                    counter = 1
-                elif previous_agent == action[3]:
-                    counter += 1
-                    if agents[action[3]] < counter:
-                        agents[action[3]] = counter
-            # max queue of acts
-            longest = 0
-            agent = ""
-            for element in range(len(agents)):
-                item = agents.popitem()
-                if item[1] > longest:
-                    longest = item[1]
-                    agent = item[0]
-            busiest.append((index, agent, longest, plan_agents))
-        cheap = []
-        alternative = []
-        cheapest = []
-        longest = 0
-        min_agents = 100
-
-        for plan in busiest:
-            if plan[2] > longest:
-                longest = plan[2]
-
-        for plan in busiest:
-            if plan[2] == longest:
-                if len(plan[3]) < min_agents:
-                    min_agents = len(plan[3])
-
-        for plan in busiest:
-            if plan[3][0]:
-                if plan[2] == longest and len(plan[3]) == min_agents and "I" in plan[3]:
-                    plans_copy = copy(plans)
-                    cheap.append(plans_copy.pop(plan[0]))
-                elif plan[2] == longest and len(plan[3]) == min_agents and not "I" in plan[3]:
-                    plans_copy = copy(plans)
-                    alternative.append(plans_copy.pop(plan[0]))
-            else:
-                plans_copy = copy(plans)
-                cheap.append(plans_copy.pop(plan[0]))
-        if len(cheap) >= 1:
-            cheapest.extend(random.choice(cheap))
-        elif len(cheap) == 0 and len(alternative):
-            logging.info("There are no plans in which I figure")
-            cheapest.extend(random.choice(alternative))
-
-        return cheapest
 
     def _meta_check_activity(self, active_pm, scripts, prev_pms):
         heuristic = []
@@ -575,42 +519,6 @@ class MapSearch():
         pm = pm.copy('meaning', 'image')
         return pm
 
-    @staticmethod
-    def mix_pairs(replace_map):
-        """
-        mix roles and objects.
-        :param replace_map:
-        :return:
-        """
-        new_chain = {}
-        elements = []
-        merged_chains = []
-        used_roles = []
-        replace_map = list(replace_map.items())
-
-        def get_role(obj, roles):
-            for role in roles:
-                if obj in role[1]:
-                    return role
-
-        for item in replace_map:
-            elements.append(item[1])
-        elements = list(itertools.product(*elements))
-        clean_el = copy(elements)
-        for element in clean_el:
-            if not len(set(element)) == len(element):
-                elements.remove(element)
-        for element in elements:
-            for obj in element:
-                avalaible_roles = [x for x in replace_map if x not in used_roles]
-                role = get_role(obj, avalaible_roles)
-                if role:
-                    used_roles.append(role)
-                    new_chain[role[0]] = obj
-            merged_chains.append(new_chain)
-            new_chain = {}
-            used_roles = []
-        return merged_chains
 
 
 

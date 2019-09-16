@@ -6,7 +6,7 @@ with open('requirements.txt') as f:
 setup(
     name='mapmulti',
     version='1.0.0',
-    packages=['mapmulti', 'mapmulti.grounding', 'mapmulti.pddl', 'mapmulti.search', 'mapmulti.agent', 'mapmulti.hddl'],
+    packages=['mapmulti', 'mapmulti.grounding', 'mapmulti.parsers', 'mapmulti.search', 'mapmulti.agent'],
     package_dir={'mapmulti': 'src'},
     url='http://cog-isa.github.io/mapplanner/',
     license='',

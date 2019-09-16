@@ -4,10 +4,10 @@ from collections import defaultdict
 import itertools
 from functools import reduce
 
-from mapcore.grounding.semnet import Sign
-from mapmulti.grounding.sign_task import Task
-from mapcore.grounding.pddl_grounding import signify_predicates, pred_resonate, _update_predicates
-from mapcore.search.mapsearch import MapSearch
+from mapcore.swm.src.components.semnet import Sign
+from mapcore.planning.grounding.planning_task import PlanningTask
+from mapcore.planning.grounding.pddl_grounding import signify_predicates, pred_resonate, _update_predicates
+from mapcore.planning.search.mapsearch import mix_pairs
 
 
 def ground(problem, plagent, exp_signs=None):
@@ -98,7 +98,7 @@ def ground(problem, plagent, exp_signs=None):
 
     if not exp_signs:
         updated_predicates = _update_predicates(predicates, actions)
-        signify_predicates(predicates, updated_predicates, signs, subtype_map)
+        signify_predicates(predicates, updated_predicates, signs, subtype_map, domain.constants)
         signify_actions(actions, constraints, signs, plagent, obj_means, obj_signifs)
         signify_connection(signs)
 
@@ -107,9 +107,7 @@ def ground(problem, plagent, exp_signs=None):
     if problem.name.startswith("blocks"):
         list_signs = task_signs(problem)
         _expand_situation_ma_blocks(goal_situation, signs, pms, list_signs)  # For task
-    elif problem.name.startswith("logistics"):
-        _expand_situation_ma_logistics(goal_situation, signs, pms)
-    return Task(problem.name, signs, start_situation, goal_situation)
+    return PlanningTask(problem.name, signs, start_situation, goal_situation)
 
 def signify_actions(actions, constraints, signs, agent, obj_means, obj_signifs):
     for action in actions:
@@ -183,11 +181,11 @@ def signify_connection(signs):
     Approve.add_out_significance(connector)
 
     brdct_signif = Broadcast.add_significance()
-    executer = brdct_signif.add_execution(Broadcast.name.lower(), effect=True)
+    executer = brdct_signif.add_feature(Broadcast.name.lower(), effect=True, actuator=True)
     Send.add_out_significance(executer)
 
     approve_signif = Approve.add_significance()
-    executer = approve_signif.add_execution(Approve.name.lower(), effect=True)
+    executer = approve_signif.add_feature(Approve.name.lower(), effect=True, actuator=True)
     Send.add_out_significance(executer)
 
 def simple(signs, obj_means, act_signif):
@@ -310,7 +308,7 @@ def specialized(action, signs, obj_means, obj_signifs, act_signif, agent, constr
                         role_signifs.pop(obj_sign)
 
 
-            pairs = MapSearch.mix_pairs(role_signifs)
+            pairs = mix_pairs(role_signifs)
             if pairs:
                 for pair in pairs:
                     act_mean_constr = act_mean.copy('meaning', 'meaning')
