@@ -5,8 +5,9 @@ import itertools
 from functools import reduce
 
 from mapcore.swm.src.components.semnet import Sign
-from mapcore.planning.grounding.planning_task import PlanningTask
-from mapcore.planning.grounding.pddl_grounding import signify_predicates, pred_resonate, _update_predicates
+from mapmulti.grounding.planning_task import MaPlanningTask
+from mapcore.planning.grounding.pddl_grounding import signify_predicates, pred_resonate, _update_predicates, \
+    _define_situation, _update_exp_signs, _create_type_map, _create_subtype, task_signs
 from mapcore.planning.search.mapsearch import mix_pairs
 
 
@@ -55,6 +56,7 @@ def ground(problem, plagent, exp_signs=None):
         obj_means[They_sign] = They_sign.add_meaning()
         obj_signifs[They_sign] = They_sign.add_significance()
         signs[They_sign.name] = They_sign
+        signs['situation'] = Sign('situation')
 
     for obj in objects:
         obj_sign = Sign(obj)
@@ -107,7 +109,7 @@ def ground(problem, plagent, exp_signs=None):
     if problem.name.startswith("blocks"):
         list_signs = task_signs(problem)
         _expand_situation_ma_blocks(goal_situation, signs, pms, list_signs)  # For task
-    return PlanningTask(problem.name, signs, start_situation, goal_situation)
+    return MaPlanningTask(problem.name, signs, start_situation, goal_situation)
 
 def signify_actions(actions, constraints, signs, agent, obj_means, obj_signifs):
     for action in actions:
@@ -386,116 +388,6 @@ def nonspecialized(constraints, act_signif, signs, agent, obj_means, obj_signifs
                 efconnector = act_mean.add_feature(ag_mean, effect=True)
                 signs[ag].add_out_meaning(connector)
 
-
-def task_signs(problem):
-    signs = []
-    above = []
-    bottom = []
-    for pred in problem.goal:
-        if pred.name == "on":
-            above.append(pred.signature[0][0])
-            bottom.append(pred.signature[1][0])
-    signs.append(list(set(above) - set(bottom))[0])
-    signs.append(list(set(bottom) - set(above))[0])
-    return signs
-
-
-def _update_exp_signs(signs, objects):
-    for obj, type in list(objects.items()).copy():
-        if signs.get(obj):
-            try:
-                objects.pop(obj)
-            except KeyError:
-                break
-
-    return objects
-
-
-def _create_subtype(types):
-    """
-    Create a map of types/subtypes to make true role signs
-    """
-    subtype_map = defaultdict(set)
-
-    for object_name, object_type in types.items():
-        parent_type = object_type.parent
-        if parent_type:
-            subtype_map[parent_type.name].add(object_type.name)
-    return subtype_map
-
-
-def _create_type_map(objects):
-    """
-    Create a map from each type to its objects.
-
-    For each object we know the type. This returns a dictionary
-    from each type to a set of objects (of this type). We also
-    have to care about type hierarchy. An object
-    of a subtype is a specialization of a specific type. We have
-    to put this object into the set of the supertype, too.
-    """
-    type_map = defaultdict(set)
-
-    # for every type we append the corresponding object
-    for object_name, object_type in objects.items():
-        parent_type = object_type.parent
-        while True:
-            type_map[object_type].add(object_name)
-            object_type, parent_type = parent_type, object_type.parent
-            if parent_type is None:
-                # if object_type is None:
-                break
-
-    return type_map
-
-
-def _define_situation(name, predicates, signs, network = 'image'):
-    situation = Sign(name)
-    sit_cm = getattr(situation, 'add_'+network)()
-    elements = {}
-
-    def get_or_add(sign):
-        if sign not in elements:
-            cm = getattr(sign, 'add_'+network)()
-            elements[sign] = cm
-        return elements.get(sign)
-
-    for predicate in predicates:
-        pred_sign = signs[predicate.name]
-        pred_cm = getattr(pred_sign, 'add_'+network)()
-        connector = sit_cm.add_feature(pred_cm)
-        getattr(pred_sign, 'add_out_'+network)(connector)
-        if len(predicate.signature) == 1:
-            sig_sign = signs[predicate.signature[0][0]]
-            sig_cm = get_or_add(sig_sign)
-            conn = sit_cm.add_feature(sig_cm, connector.in_order)
-            getattr(sig_sign, 'add_out_' + network)(conn)
-        elif len(predicate.signature) > 1:
-            pre_signs = set()
-            for fact in predicate.signature:
-                role_signs = [con.in_sign for con in getattr(signs[fact[0]], 'out_significances') if con.in_sign.name != 'object']
-                for el in role_signs:
-                    if el.significances:
-                        if len(el.significances[1].cause) == 1 and len(el.significances[1].effect) == 0:
-                            pre_signs.add(el)
-            if len(pre_signs) < len(predicate.signature):
-                for fact in predicate.signature:
-                    fact_sign = signs[fact[0]]
-                    fact_cm = get_or_add(fact_sign)
-                    conn = pred_cm.add_feature(fact_cm)
-                    getattr(fact_sign, 'add_out_' + network)(conn)
-            else:
-                for fact in predicate.signature:
-                    fact_sign = signs[fact[0]]
-                    fact_image = get_or_add(fact_sign)
-                    conn = sit_cm.add_feature(fact_image, connector.in_order)
-                    getattr(fact_sign, 'add_out_' + network)(conn)
-                    conn = pred_cm.add_feature(fact_image)
-                    getattr(fact_sign, 'add_out_' + network)(conn)
-
-    return situation, elements
-
-
 def _expand_situation_ma_blocks(goal_situation, signs, pms, list_signs):
     ont_image = signs['ontable'].add_image()
     a_image = pms[signs[list_signs[1]]]
@@ -509,20 +401,5 @@ def _expand_situation_ma_blocks(goal_situation, signs, pms, list_signs):
     conn = goal_situation.images[1].add_feature(d_image, connector.in_order)
     signs['clear'].add_out_image(conn)
     signs[list_signs[0]].add_out_image(conn)
-    he_image = signs['handempty'].add_image()
-    connector = goal_situation.images[1].add_feature(he_image)
-    signs['handempty'].add_out_image(connector)
 
-def _expand_situation_ma_logistics(goal_situation, signs, pms):
 
-    at_image = signs['at'].add_image()
-    tru1_image = signs['tru1'].add_image()
-    pos1_image = pms[signs['pos1']]
-    connector = at_image.add_feature(tru1_image)
-    connector = at_image.add_feature(pos1_image)
-    connector = goal_situation.images[1].add_feature(at_image)
-    conn = goal_situation.images[1].add_feature(tru1_image, connector.in_order)
-    con = goal_situation.images[1].add_feature(pos1_image, connector.in_order)
-    signs['at'].add_out_images(connector)
-    signs['tru1'].add_out_image(conn)
-    signs['pos1'].add_out_image(con)

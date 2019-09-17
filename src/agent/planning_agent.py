@@ -99,10 +99,10 @@ class MAgent(PlanningAgent):
         for sol in solution.split(';')[:-1]:
             solacr+=sol.strip() + ';'
         for solution, goal in self.allsolutions:
+            if self.backward:
+                solution = list(reversed(solution))
             acronim = self.sol_to_acronim(solution)
             if acronim == solacr:
-                if self.backward:
-                    solution = list(reversed(solution))
                 if not self.task.goal_situation:
                     self.task.goal_situation = goal
                 file_name = self.task.save_signs(solution)

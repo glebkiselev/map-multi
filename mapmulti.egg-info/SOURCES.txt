@@ -20,6 +20,7 @@ src/benchmarks/mapddl/blocks/task5.pddl
 src/grounding/__init__.py
 src/grounding/hddl_grounding.py
 src/grounding/pddl_grounding.py
+src/grounding/planning_task.py
 src/parsers/__init__.py
 src/parsers/branch_parser.py
 src/parsers/hddl_parser.py
