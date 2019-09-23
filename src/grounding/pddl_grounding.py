@@ -191,11 +191,15 @@ def signify_connection(signs):
     Send.add_out_significance(executer)
 
 def simple(signs, obj_means, act_signif):
+    agents = set()
     I_sign = signs['I']
-    act_mean = act_signif.copy('significance', 'meaning')
-    connector = act_mean.add_feature(obj_means[I_sign])
-    efconnector = act_mean.add_feature(obj_means[I_sign], effect=True)
-    I_sign.add_out_meaning(connector)
+    agents.add(I_sign)
+    agents |= {cm.sign for cm in signs['They'].spread_up_activity_obj('significance', 1)}
+    for agent in agents:
+        act_mean = act_signif.copy('significance', 'meaning')
+        connector = act_mean.add_feature(obj_means[agent])
+        efconnector = act_mean.add_feature(obj_means[agent], effect=True)
+        agent.add_out_meaning(connector)
 
 
 def specialized(action, signs, obj_means, obj_signifs, act_signif, agent, constraints):

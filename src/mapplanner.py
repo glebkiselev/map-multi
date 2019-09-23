@@ -47,8 +47,12 @@ class MapPlanner(MPcore):
         elif act_agents:
             agents |= act_agents
         else:
-            agents.add('I')
-            logging.info('Only 1 agent plan')
+            for item, type in problem.objects.items():
+                if type.name == 'agent':
+                    agents.add(item)
+            if not agents:
+                agents.add("I")
+                logging.info("Can not find any agents. Thinking that is is only 1.")
         return agents, problem
 
     def _parse_mahddl(self):
