@@ -1,6 +1,7 @@
 import importlib
 import logging
 import time
+import os
 from multiprocessing import Pipe, Process
 from multiprocessing.util import log_to_stderr
 
@@ -96,6 +97,7 @@ class MAgent(PlanningAgent):
 
     def save_solution(self, solution):
         solacr = ''
+        file_name = None
         for sol in solution.split(';')[:-1]:
             solacr+=sol.strip() + ';'
         for solution, goal in self.allsolutions:
@@ -110,7 +112,15 @@ class MAgent(PlanningAgent):
                     logging.info('Agent ' + self.name + ' finished all works')
                 break
         else:
-            logging.info("Agent {0} can not find the right solution to save!")
+            logging.info("Agent {0} can not find the right solution to save!".format(self.name))
+        if not file_name:
+            for f in os.listdir(os.getcwd()):
+                if f.startswith('wmodel_'):
+                    if f.split(".")[0].endswith(self.name) or f.split(".")[0].endswith('agent'):
+                        file_name = f
+                        break
+        file_name = os.getcwd() +'/'+ file_name
+        return file_name
 
 
 
@@ -171,7 +181,8 @@ def agent_activation(agpath, agtype, name, agents, problem, backward, TaskType, 
         childpipe.send(solution)
     # Save solution
     solution_to_save = childpipe.recv()
-    workman.save_solution(solution_to_save)
+    file_name = workman.save_solution(solution_to_save)
+    childpipe.send(file_name)
 
 
 class Manager:
@@ -227,9 +238,13 @@ class Manager:
                 final_solution = conn.recv()
                 break
 
-        # Send final solution to all agents
+        # Send final solution to all agents and get paths to experience files
+        exp_path = {}
         for info, conn in group_experience:
             conn.send(final_solution)
+            exp_path[info[0]] = conn.recv()
 
         for pr, conn in allProcesses:
             pr.join()
+
+        return exp_path

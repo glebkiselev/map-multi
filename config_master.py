@@ -3,7 +3,8 @@ import os
 import sys
 import pkg_resources
 
-def create_config(domen = 'blocks', task_num = '1', refinement_lv = '1', benchmark = None, delim = '/', backward = 'True', task_type = 'classic'):
+def create_config(domen = 'blocks', task_num = '1', refinement_lv = '1', benchmark = None, delim = '/',
+                  backward = 'True', task_type = 'classic', agpath = "mapmulti.agent.planning_agent", agtype = "MAgent"):
     """
     Create a config file for map-multi algorithm
     """
@@ -39,8 +40,8 @@ def create_config(domen = 'blocks', task_num = '1', refinement_lv = '1', benchma
     config.set("Settings", "domain", domain)
     config.set("Settings", "path", path)
     config.set("Settings", "task", task_num)
-    config.set("Settings", "agpath", "mapmulti.agent.planning_agent")
-    config.set("Settings", "agtype", "MAgent")
+    config.set("Settings", "agpath", agpath)
+    config.set("Settings", "agtype", agtype)
     config.set("Settings", "backward", backward)
     config.set("Settings", "refinement_lv", refinement_lv)
     config.set("Settings", "TaskType", task_type)

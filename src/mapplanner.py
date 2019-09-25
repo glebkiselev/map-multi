@@ -100,8 +100,6 @@ class MapPlanner(MPcore):
 
         return domain, problem
 
-
-
     def search(self):
         if self.TaskType == 'hddl':
             problem = self._parse_hddl()
