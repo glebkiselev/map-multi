@@ -4,6 +4,7 @@ import time
 import os
 from multiprocessing import Pipe, Process
 from multiprocessing.util import log_to_stderr
+import pickle
 
 from mapcore.planning.agent.planning_agent import PlanningAgent
 from mapmulti.agent.messagen import reconstructor
@@ -182,7 +183,11 @@ def agent_activation(agpath, agtype, name, agents, problem, backward, TaskType, 
     # Save solution
     solution_to_save = childpipe.recv()
     file_name = workman.save_solution(solution_to_save)
-    childpipe.send(file_name)
+    solution = [sol for sol in workman.allsolutions if sol[0] == workman.solution[:-1] or list(reversed(sol[0])) == workman.solution[:-1]][0]
+    if workman.backward:
+        solution = (list(reversed(solution[0])), solution[1])
+    agent_solution = pickle.dumps(solution)
+    childpipe.send((agent_solution,file_name))
 
 
 class Manager:
@@ -242,7 +247,8 @@ class Manager:
         exp_path = {}
         for info, conn in group_experience:
             conn.send(final_solution)
-            exp_path[info[0]] = conn.recv()
+            solution, path = conn.recv()
+            exp_path[info[0]] = (pickle.loads(solution), path)
 
         for pr, conn in allProcesses:
             pr.join()

@@ -17,12 +17,13 @@ def main(args):
     argparser.add_argument(dest='problem', nargs='?')
     argparser.add_argument(dest='agpath', nargs='?')
     argparser.add_argument(dest='agtype', nargs='?')
+    argparser.add_argument(dest='backward', nargs='?')
     argparser.add_argument(dest='config_path', nargs='?')
     args = argparser.parse_args(args)
-    if args.problem and args.agpath and args.agtype:
+    if args.problem and args.agpath and args.agtype and args.backward:
         if not args.config_path:
             path = create_config(benchmark=os.path.abspath(args.problem), delim=delim,
-                                 task_type='mapddl', agpath = args.agpath, agtype = args.agtype)
+                                 task_type='mapddl', agpath = args.agpath, agtype = args.agtype, backward=args.backward)
         else:
             path = args.config_path
     else:
