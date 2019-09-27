@@ -27,11 +27,13 @@
 )
 (:goal
 	(and
+	    (clear d)
 	    (handempty a1)
 	    (handempty a2)
 		(on d c)
 		(on c b)
 		(on b a)
+		(ontable a)
         (blocktype big a)
         (blocktype small b)
         (blocktype big c)

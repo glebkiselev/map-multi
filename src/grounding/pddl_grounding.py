@@ -106,9 +106,9 @@ def ground(problem, plagent, exp_signs=None):
 
     start_situation, pms = _define_situation('*start*', problem.initial_state, signs, 'image')
     goal_situation, pms = _define_situation('*finish*', problem.goal, signs, 'image')
-    if problem.name.startswith("blocks"):
-        list_signs = task_signs(problem)
-        _expand_situation_ma_blocks(goal_situation, signs, pms, list_signs)  # For task
+    # if problem.name.startswith("blocks"):
+    #     list_signs = task_signs(problem)
+    #     _expand_situation_ma_blocks(goal_situation, signs, pms, list_signs)  # For task
     return MaPlanningTask(problem.name, signs, start_situation, goal_situation)
 
 def signify_actions(actions, constraints, signs, agent, obj_means, obj_signifs):
