@@ -70,8 +70,6 @@ class MapSearch():
         if not self.exp_acts:
             self.exp_acts = self.hierarch_acts()
 
-
-
     def applicable_search(self, meanings, active_pm):
         applicable_meanings = set()
         for agent, cm in meanings:
@@ -160,6 +158,8 @@ class MapSearch():
                         acts.append(act[1])
                 self.exp_sits.add(next_pm)
                 subplan = self.hierarchical_exp_search(active_pm, next_pm, iteration, prev_state, acts)
+                if not subplan:
+                    print('CANT expand %s' % name)
             if not subplan:
                 plan.append((active_pm, name, script, ag_mask))
             else:
