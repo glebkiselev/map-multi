@@ -38,7 +38,7 @@ class MAgent(PlanningAgent):
         :return: task - sign representation of the problem.
         """
         logging.info('Grounding start: {0}'.format(self.problem.name))
-        signs = self.load_swm()
+        signs = self.load_swm(type = 'classic')
         if self.TaskType == 'mahddl':
             from mapmulti.grounding import hddl_grounding
             self.task = hddl_grounding.ground(self.problem, self.name, signs)
