@@ -46,6 +46,7 @@ def ground(problem, plagent, exp_signs=None):
         obj_signifs[I_sign] = I_sign.significances[1]
         obj_means[They_sign] = They_sign.meanings[1]
         obj_signifs[They_sign] = They_sign.significances[1]
+        signs['situation'] = exp_signs['situation']
     else:
         signs = {}
         I_sign = Sign("I")
