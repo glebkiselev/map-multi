@@ -19,7 +19,7 @@ A_C = 4
 class MapSearch():
     def __init__ (self, task, TaskType, backward):
         self.world_model = task.signs
-        self.MAX_ITERATION = 10
+        self.MAX_ITERATION = 6
         self.exp_acts = []
         self.exp_sits = set()
         self.backward = backward
@@ -27,7 +27,7 @@ class MapSearch():
         self.scenario = None
         self.final_plans = []
         if TaskType == 'mapddl':
-            self.MAX_ITERATION = 30
+            self.MAX_ITERATION = 8
             if self.backward:
                 self.check_pm = task.start_situation.images[1]
                 self.active_pm = task.goal_situation.images[1]
