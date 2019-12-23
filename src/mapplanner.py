@@ -35,7 +35,7 @@ class MapPlanner(MPcore):
 
         problem = self._parse_pddl()
         act_agents = self.action_agents(problem)
-        logging.info('Agents found in actions: {0}'.format(len(act_agents)))
+        logging.debug('Agents found in actions: {0}'.format(len(act_agents)))
         agents = set()
         if problem.constraints:
             if len(act_agents):
@@ -43,7 +43,7 @@ class MapPlanner(MPcore):
             else:
                 for constr in problem.constraints:
                     agents.add(constr)
-                logging.info('Agents found in constraints: {0}'.format(len(agents)))
+                logging.debug('Agents found in constraints: {0}'.format(len(agents)))
         elif act_agents:
             agents |= act_agents
         else:
@@ -52,7 +52,7 @@ class MapPlanner(MPcore):
                     agents.add(item)
             if not agents:
                 agents.add("I")
-                logging.info("Can not find any agents. Thinking that is is only 1.")
+                logging.debug("Can not find any agents. Thinking that it is only 1.")
         return agents, problem
 
     def _parse_mahddl(self):
@@ -62,14 +62,14 @@ class MapPlanner(MPcore):
         """
         from mapmulti.parsers.hddl_parser import maHDDLParser
         parser = maHDDLParser(self.domain, self.problem)
-        logging.info('Parsing was finished...')
-        logging.info('Parsing Domain {0}'.format(self.domain))
+        logging.info('Распознаю классическую многоагентную задачу...')
+        logging.debug('Распознаю домен {0}'.format(self.domain))
         domain = parser.ParseDomain(parser.domain)
-        logging.info('Parsing Problem {0}'.format(self.problem))
+        logging.debug('Распознаю проблему {0}'.format(self.problem))
         problem = parser.ParseProblem(parser.problem, domain)
-        logging.info('{0} Predicates parsed'.format(len(domain['predicates'])))
-        logging.info('{0} Actions parsed'.format(len(domain['actions'])))
-        logging.info('{0} Methods parsed'.format(len(domain['methods'])))
+        logging.debug('{0} Predicates parsed'.format(len(domain['predicates'])))
+        logging.debug('{0} Actions parsed'.format(len(domain['actions'])))
+        logging.debug('{0} Methods parsed'.format(len(domain['methods'])))
         agents = list(problem.constraints.keys())
         return agents, problem
 
