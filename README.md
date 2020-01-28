@@ -22,17 +22,18 @@ and [HTN planning](https://en.wikipedia.org/wiki/Hierarchical_task_network).
 
 ## Installation
 
-To install the current release:
+To install the current release install previously map-core library:
 
 ```
+>>>source venv/bin/activate
 >>>python3 setup.py sdist
->>>pip3 install .
+>>>python3 setup.py install
 ```
 
 To run the test example:
 
 ```
-python3 test.py
+python3 test1.py
 ```
 
 #### Try your tasks
