@@ -4,6 +4,7 @@ import mapcore.swm.src.components.sign_task as st
 import random
 from mapcore.swm.src.components.semnet import Sign
 from mapcore.planning.search.mapsearch import mix_pairs
+from mapcore.planning.search.mapsearch import MapSearch as MScore
 from copy import copy
 import itertools
 
@@ -16,7 +17,7 @@ world model for the present task
 '''
 A_C = 4
 
-class MapSearch():
+class MapSearch(MScore):
     def __init__ (self, task, TaskType, backward):
         self.world_model = task.signs
         self.MAX_ITERATION = 6
@@ -45,47 +46,23 @@ class MapSearch():
 
     def search_plan(self):
         self.I_sign, self.I_obj, self.agents = self.__get_agents()
-        self._precedent_activation()
+        self.precedent_activation()
         plans = self._map_iteration(self.active_pm, iteration=0, current_plan=[])
         return plans
-
-    def _precedent_search(self, active_pm):
-        precedents = []
-        active_cm = active_pm.copy('image', 'meaning')
-        for cm in self.precedents:
-            result, checked = self._check_activity(cm, active_cm, self.backward, True)
-            if result:
-                precedents.append((self.I_sign, checked))
-        return precedents
-
-    def _precedent_activation(self):
-        if not self.exp_sits:
-            self.exp_sits = self.world_model['situation'].spread_down_activity_obj('image', 1)
-        for sit in self.exp_sits:
-            if sit.sign.out_meanings:
-                precedent = sit.sign.spread_up_activity_act('meaning', 1)
-                if precedent:
-                    pr = list(precedent)[0].sign
-                    self.precedents.add(pr.meanings[1])
-        if not self.exp_acts:
-            self.exp_acts = self.hierarch_acts()
 
     def applicable_search(self, meanings, active_pm):
         applicable_meanings = set()
         for agent, cm in meanings:
-            result, checked = self._check_activity(cm, active_pm.sign.meanings[1], self.backward)
+            if (agent, cm) in self.precedents:
+                expandable = True
+            else:
+                expandable = False
+            result, checked = self._check_activity(cm, active_pm, self.backward, expandable=expandable)
             if result:
                 maxlen = max([len(el) for el in checked.spread_down_activity('meaning', A_C)])
-                if maxlen > 2:
+                if maxlen >= 2:
                     applicable_meanings.add((agent, checked))
         return applicable_meanings
-
-    def _experience_parts(self, precedents):
-        if precedents:
-            if not self.exp_sits:
-                self.exp_sits = self.world_model['situation'].spread_down_activity_obj('image', 1)
-            if not self.exp_acts:
-                self.exp_acts = self.hierarch_acts()
 
     def _map_iteration(self, active_pm, iteration, current_plan, prev_state = []):
         logging.debug('STEP {0}:'.format(iteration))
@@ -95,7 +72,7 @@ class MapSearch():
             logging.debug('\tMax iteration count')
             return None
 
-        precedents = self._precedent_search(active_pm)
+        precedents = self.precedent_search(active_pm)
 
         act_matrice = None
         if self.scenario:
@@ -103,6 +80,7 @@ class MapSearch():
 
         active_chains = active_pm.spread_down_activity('image', A_C)
         active_signifs = dict()
+        active_pm = active_pm.sign.images[1].copy('image', 'meaning')
 
         for chain in active_chains:
             pm = chain[-1]
@@ -112,8 +90,6 @@ class MapSearch():
                     active_signifs.setdefault(signif.sign, set()).update({el for el in active_signif if el.sign.name == signif.sign.name})
         if act_matrice:
             active_signifs = {key:value for key, value in active_signifs.items() if key == act_matrice.sign}
-
-        self._experience_parts(precedents)
 
         meanings = []
         for pm_signif, ams in active_signifs.items():
@@ -150,7 +126,7 @@ class MapSearch():
             logging.debug('\tChoose {0}: {1} -> {2}'.format(counter, name, script))
             plan = copy(current_plan)
             subplan = None
-            next_pm = self._time_shift_forward(active_pm.sign.meanings[1], script, backward=self.backward)
+            next_pm = self._time_shift_forward(active_pm, script, backward=self.backward)
             if script.sign.images:
                 acts = []
                 for act in script.sign.images[1].spread_down_activity('image', 2):
@@ -158,15 +134,17 @@ class MapSearch():
                         acts.append(act[1])
                 self.exp_sits.add(next_pm)
                 subplan = self.hierarchical_exp_search(active_pm, next_pm, iteration, prev_state, acts)
+                min_length = min([len(pl) for pl in subplan])
+                subplan = list(filter(lambda x: len(x) == min_length, subplan))[0]
                 if not subplan:
                     print('CANT expand %s' % name)
             if not subplan:
-                plan.append((active_pm, name, script, ag_mask))
+                plan.append((active_pm.sign.images[1], name, script, ag_mask))
             else:
                 plan.extend(subplan)
                 logging.info(
                     'Сложное действие {0} уточнено до подплана: {1}'.format(script.sign.name, [part[1] for part in subplan]))
-                prev_state.append(active_pm)
+                prev_state.append(active_pm.sign.images[1])
             _isbuild = False
             if self.check_pm:
                 if next_pm.includes('image', self.check_pm):
@@ -215,50 +193,59 @@ class MapSearch():
 
         return applicable_meanings
 
-    def hierarchical_exp_search(self, active_pm, check_pm, iteration, prev_state, acts, cur_plan = []):
-        """
-        create a subplan using images info
-        :param script: parametrs to generate plan
-        :return:plan
-        """
-        if not cur_plan:
-            logging.info('Уточняю сложное действие')
-
-        if self.backward:
-            act = acts[-(iteration+1)].sign
-        else:
-            act = acts[iteration].sign
-        finall_plans = []
-        plan = copy(cur_plan)
-
-        applicable = self.applicable_search([action for action in self.exp_acts[act] if
-                                             (action[0] is not None and len(action[1].cause))], active_pm.sign.meanings[1])
-
-        if not applicable:
-            logging.debug('No applicable actions was found')
-            return None
-
-        for action in applicable:
-            next_pm = self._time_shift_forward(active_pm.sign.meanings[1], action[1], self.backward)
-            included_sit = [sit for sit in self.exp_sits if sit.includes('image', next_pm)]
-            if included_sit:
-                plan.append(
-                    (active_pm, action[1].sign.name, action[1], action[0]))
-                logging.info('Прецедент уточнен. Добавлено поддействие: %s' % action[1].sign.name)
-            else:
-                continue
-            if next_pm.includes('image', check_pm):
-                    if plan:
-                        finall_plans.extend(plan)
-                    else:
-                        finall_plans.extend(plan)
-                        break
-            else:
-                plan = self.hierarchical_exp_search(next_pm, check_pm, iteration+1, prev_state, acts, plan)
-                if plan:
-                    finall_plans.extend(plan)
-                    break
-        return finall_plans
+    # def hierarchical_exp_search(self, active_pm, check_pm, iteration, prev_state, acts, cur_plan = []):
+    #     """
+    #     create a subplan using images info
+    #     :param script: parametrs to generate plan
+    #     :return:plan
+    #     """
+    #     if iteration > len(acts):
+    #         return None
+    #     if not cur_plan:
+    #         logging.info('Clarify experience plan')
+    #     try:
+    #         if self.backward:
+    #             act = acts[-(iteration+1)].sign
+    #         else:
+    #             act = acts[iteration].sign
+    #     except IndexError:
+    #         return None
+    #     finall_plans = []
+    #
+    #     try:
+    #         active_pm.spread_down_activity('meaning', 5)
+    #     except Exception:
+    #         active_pm = active_pm.sign.images[1].copy('image', 'meaning')
+    #
+    #
+    #     applicable = self.applicable_search([action for action in self.exp_acts[act] if
+    #                                          (action[0] is not None and len(action[1].cause))], active_pm)
+    #
+    #     if not applicable:
+    #         logging.debug('No applicable actions was found')
+    #         return None
+    #
+    #     for action in applicable:
+    #         plan = copy(cur_plan)
+    #         next_pm = self._time_shift_forward(active_pm, action[1], self.backward)
+    #         included_sit = [sit for sit in self.exp_sits if sit.includes('image', next_pm)]
+    #         if included_sit:
+    #             plan.append(
+    #                 (active_pm.sign.images[1], action[1].sign.name, action[1], action[0]))
+    #             logging.info('Прецедент уточнен. Добавлено поддействие: %s' % action[1].sign.name)
+    #         else:
+    #             continue
+    #         if next_pm.includes('image', check_pm):
+    #                 if plan:
+    #                     finall_plans.append(plan)
+    #                 else:
+    #                     finall_plans.append(plan)
+    #                     break
+    #         else:
+    #             plan = self.hierarchical_exp_search(next_pm, check_pm, iteration+1, prev_state, acts, plan)
+    #             if plan:
+    #                 finall_plans.extend(plan)
+    #     return finall_plans
 
     def __get_agents(self):
         agent_back = set()
@@ -395,55 +382,55 @@ class MapSearch():
                     pms.remove(pair)
         return pms
 
-    def _check_activity(self, pm, next_cm, backward = False, prec_search = False):
-        if len(pm.cause) and len(pm.effect):
-            result = True
-        else:
-            result = False
+    # def _check_activity(self, pm, next_cm, backward = False, prec_search = False, expandable = True):
+    #     if len(pm.cause) and len(pm.effect):
+    #         result = True
+    #     else:
+    #         result = False
+    #
+    #     bigger = next_cm.cause
+    #     smaller = self._applicable_events(pm, backward)
+    #     if prec_search: bigger, smaller = smaller, bigger
+    #
+    #     for event in smaller:
+    #         for fevent in bigger:
+    #             if event.resonate('meaning', fevent, True):
+    #                 break
+    #         else:
+    #             result = False
+    #             break
+    #
+    #     if expandable:
+    #         if not result:
+    #             expanded = pm.expand('meaning')
+    #             if not len(expanded.effect) == 0:
+    #                 result = self._check_activity(expanded, next_cm, backward, prec_search)
+    #                 return result
+    #             else:
+    #                 expanded.sign.remove_meaning(expanded)
+    #                 return False, pm
+    #     return result, pm
 
-        bigger = next_cm.cause
-        smaller = self._applicable_events(pm, backward)
-        if prec_search: bigger, smaller = smaller, bigger
-
-        for event in smaller:
-            for fevent in bigger:
-                if event.resonate('meaning', fevent, True):
-                    break
-            else:
-                result = False
-                break
-
-        if not result:
-            expanded = pm.expand('meaning')
-            if not len(expanded.effect) == 0:
-                result = self._check_activity(expanded, next_cm, backward, prec_search)
-                #TODO delete False expanded
-                return result
-            else:
-                expanded.sign.remove_meaning(expanded)
-                return False, pm
-        return result, pm
-
-    def _meta_check_activity(self, active_pm, scripts, prev_pms):
-        heuristic = []
-        for agent, script in scripts:
-            estimation = self._time_shift_forward(active_pm.sign.meanings[1], script, self.backward)
-            for prev in prev_pms:
-                if estimation.resonate('image', prev, False, False):
-                    break
-            else:
-                counter = 0
-                for event in self._applicable_events(estimation):
-                    for ce in self._applicable_events(self.check_pm):
-                        if event.resonate('image', ce):
-                            counter += 1
-                            break
-                heuristic.append((counter, script.sign.name, script, agent))
-        if heuristic:
-            best_heuristics = max(heuristic, key=lambda x: x[0])
-            return list(filter(lambda x: x[0] == best_heuristics[0], heuristic))
-        else:
-            return None
+    # def _meta_check_activity(self, active_pm, scripts, prev_pms):
+    #     heuristic = []
+    #     for agent, script in scripts:
+    #         estimation = self._time_shift_forward(active_pm, script, self.backward)
+    #         for prev in prev_pms:
+    #             if estimation.resonate('image', prev, False, False):
+    #                 break
+    #         else:
+    #             counter = 0
+    #             for event in self._applicable_events(estimation):
+    #                 for ce in self._applicable_events(self.check_pm):
+    #                     if event.resonate('image', ce):
+    #                         counter += 1
+    #                         break
+    #             heuristic.append((counter, script.sign.name, script, agent))
+    #     if heuristic:
+    #         best_heuristics = max(heuristic, key=lambda x: x[0])
+    #         return list(filter(lambda x: x[0] == best_heuristics[0], heuristic))
+    #     else:
+    #         return None
 
     def _applicable_events(self, pm, effect = False):
         """
@@ -485,33 +472,33 @@ class MapSearch():
                 extfiles.extend(self.recursive_files(os.path.join(root, sub), ext))
             return extfiles
 
-    def _time_shift_forward(self, active_pm, script, backward = False):
-        """
-        Next situation synthesis
-        :param active_pm: meaning of active situation
-        :param script: meaning of active action
-        :param backward: planning style
-        :return:
-        """
-        next_situation = Sign(st.SIT_PREFIX + str(st.SIT_COUNTER))
-        self.world_model[next_situation.name] = next_situation
-        pm = next_situation.add_meaning()
-        st.SIT_COUNTER += 1
-        copied = {}
-        for event in active_pm.cause:
-            for es in self._applicable_events(script, effect=backward):
-                if event.resonate('meaning', es):
-                    break
-            else:
-                pm.add_event(event.copy(pm, 'meaning', 'meaning', copied))
-        for event in self._applicable_events(script, effect=not backward):
-            pm.add_event(event.copy(pm, 'meaning', 'meaning', copied))
-        pm = pm.copy('meaning', 'image')
-        global_situation = self.world_model['situation']
-        global_cm = global_situation.add_image()
-        connector = global_cm.add_feature(pm)
-        next_situation.add_out_image(connector)
-        return pm
+    # def _time_shift_forward(self, active_pm, script, backward = False):
+    #     """
+    #     Next situation synthesis
+    #     :param active_pm: meaning of active situation
+    #     :param script: meaning of active action
+    #     :param backward: planning style
+    #     :return:
+    #     """
+    #     next_situation = Sign(st.SIT_PREFIX + str(st.SIT_COUNTER))
+    #     self.world_model[next_situation.name] = next_situation
+    #     pm = next_situation.add_meaning()
+    #     st.SIT_COUNTER += 1
+    #     copied = {}
+    #     for event in active_pm.cause:
+    #         for es in self._applicable_events(script, effect=backward):
+    #             if event.resonate('meaning', es):
+    #                 break
+    #         else:
+    #             pm.add_event(event.copy(pm, 'meaning', 'meaning', copied))
+    #     for event in self._applicable_events(script, effect=not backward):
+    #         pm.add_event(event.copy(pm, 'meaning', 'meaning', copied))
+    #     pm = pm.copy('meaning', 'image')
+    #     global_situation = self.world_model['situation']
+    #     global_cm = global_situation.add_image()
+    #     connector = global_cm.add_feature(pm)
+    #     next_situation.add_out_image(connector)
+    #     return pm
 
 
 

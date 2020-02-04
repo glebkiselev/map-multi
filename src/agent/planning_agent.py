@@ -3,7 +3,7 @@ import logging
 import time
 import os
 from multiprocessing import Pipe, Process
-from multiprocessing.util import log_to_stderr
+from multiprocessing import log_to_stderr
 import pickle
 
 from mapcore.planning.agent.planning_agent import PlanningAgent
@@ -120,7 +120,12 @@ class MAgent(PlanningAgent):
                     if f.split(".")[0].endswith(self.name) or f.split(".")[0].endswith('agent'):
                         file_name = f
                         break
-        file_name = os.getcwd() +'/'+ file_name
+        import platform
+        if platform.system() != 'Windows':
+            delim = '/'
+        else:
+            delim = '\\'
+        file_name = os.getcwd() +delim+ file_name
         return file_name
 
 

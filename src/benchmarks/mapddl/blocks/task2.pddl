@@ -40,6 +40,8 @@
         (blocktype small b)
         (blocktype middle c)
         (blocktype small d)
+        (clear d)
+        (ontable a)
 	)
 )
 

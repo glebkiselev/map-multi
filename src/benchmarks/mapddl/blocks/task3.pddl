@@ -1,71 +1,54 @@
-(define (problem BLOCKS-1-0) (:domain blocks)
+    (define (problem BLOCKS-1-3) (:domain blocks)
 (:objects
 	a - block
 	c - block
 	b - block
 	d - block
-	e - block
-	g - block
     a1 - agent
     a2 - agent
-    a3 - agent
     big - size
     small - size
-    middle - size
 )
 (:init
 	(handempty a1)
 	(handempty a2)
-	(handempty a3)
-	(clear c)
 	(clear a)
-	(clear b)
 	(clear d)
-	(clear e)
-	(clear g)
 	(ontable c)
-	(ontable a)
-	(ontable b)
 	(ontable d)
-	(ontable e)
-	(ontable g)
-	(blocktype big g)
+	(on a b)
+	(on b c)
 	(blocktype big a)
 	(blocktype small b)
-	(blocktype middle c)
+	(blocktype big c)
 	(blocktype small d)
-	(blocktype middle e)
 )
 (:goal
 	(and
 	    (handempty a1)
 	    (handempty a2)
-	    (handempty a3)
-	    (on g e)
-		(on e d)
+	    (clear d)
 		(on d c)
 		(on c b)
 		(on b a)
-        (blocktype big g)
+		(ontable a)
         (blocktype big a)
         (blocktype small b)
-        (blocktype middle c)
+        (blocktype big c)
         (blocktype small d)
-        (blocktype middle e)
 	)
 )
 
 (:constraints
     (and
+
         (and (always (forall (?x - block)
-            (implies (or (blocktype big ?x) (blocktype middle ?x)) (holding a3 ?x))))
+            (implies (blocktype big ?x)(holding a1 ?x))))
         )
         (and (always (forall (?x - block)
-            (implies (or (blocktype big ?x) (blocktype small ?x)) (holding a1 ?x))))
+            (implies (blocktype small ?x)(holding a2 ?x))))
         )
-        (and (always (forall (?x - block)
-            (implies (or (blocktype middle ?x) (blocktype small ?x)) (holding a2 ?x))))
-        )
+
     )
 )
 )
